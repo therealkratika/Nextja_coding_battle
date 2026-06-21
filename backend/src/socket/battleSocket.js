@@ -244,7 +244,14 @@ const battleSocket = (socket, io) => {
       // Tell every player in the room to navigate to the battle screen
       io.to(normalizedCode).emit("battle-started", {
         message: "The battle has begun! Good luck! ⚔️",
-        battle, // frontend may use roomCode, timeLimit, questionCount etc.
+        roomCode: normalizedCode,
+        battle: {
+          roomCode: normalizedCode,
+          questionCount: battle.questionCount,
+          timeLimit: battle.timeLimit,
+          difficulty: battle.difficulty,
+          battleName: battle.battleName,
+        },
       });
 
       console.log(`⚔️  Battle STARTED in room: ${normalizedCode} (host: ${host})`);

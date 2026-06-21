@@ -46,15 +46,6 @@ const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
     return res.status(500).json({ success: false, message: "Server error while creating battle" });
   }
 };
-
-// ─────────────────────────────────────────────
-// POST /api/battle/join
-// ─────────────────────────────────────────────
-/**
- * Validates the room AND adds the player to MongoDB in one step.
- * After this succeeds, the frontend connects via Socket.io.
- * Body: { roomCode, username }
- */
  const joinBattle = async (req, res) => {
   try {
     const { roomCode, username } = req.body;
@@ -66,8 +57,6 @@ const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
         message: "roomCode and username are required",
       });
     }
-
-    // 2. Trim whitespace and normalise the room code to uppercase
     const normalizedCode = roomCode.trim().toUpperCase();
     const normalizedUsername = username.trim();
 
@@ -87,8 +76,6 @@ const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
         message: "This battle has already started or has ended.",
       });
     }
-
-    // 5. Is there space in the room?
     if (battle.players.length >= battle.maxPlayers) {
       return res.status(400).json({
         success: false,
