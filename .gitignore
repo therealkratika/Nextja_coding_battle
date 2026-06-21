@@ -42,3 +42,4 @@ prisma/dev.db
 
 # Generated files
 *.tsbuildinfo
+.env

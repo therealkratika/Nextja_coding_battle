@@ -1,13 +1,6 @@
 const Battle = require('../model/battle.js')
 const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
 
-// ─────────────────────────────────────────────
-// POST /api/battle/create
-// ─────────────────────────────────────────────
-/**
- * Creates a new battle room.
- * Body: { battleName, difficulty, questionCount, timeLimit, maxPlayers, username }
- */
  const createBattle = async (req, res) => {
   try {
     const { battleName, difficulty, questionCount, timeLimit, maxPlayers, username } = req.body;
@@ -32,7 +25,14 @@ const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
       timeLimit,
       maxPlayers,
       host: username,
-      players: [], // Players will join via Socket.io, not HTTP
+      players: [
+        {
+          username: username.trim(),
+          socketId: `pending:${Date.now()}`,
+          ready: false,
+          score: 0,
+        },
+      ],
       status: "waiting",
     });
 
@@ -42,7 +42,7 @@ const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
       data: battle,
     });
   } catch (error) {
-    console.error("createBattle error:", error.message);
+    console.error("createBattle error:", error);
     return res.status(500).json({ success: false, message: "Server error while creating battle" });
   }
 };
@@ -107,11 +107,9 @@ const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
       });
     }
 
-    // 7. All checks passed — add the player to the DB now.
-    //    socketId is empty here; it gets updated when the socket connects.
     battle.players.push({
       username: normalizedUsername,
-      socketId: "",   // Will be filled in by the join-room socket event
+      socketId: `pending:${Date.now()}`,
       ready: false,
       score: 0,
     });
@@ -125,7 +123,7 @@ const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
       data: battle,
     });
   } catch (error) {
-    console.error("joinBattle error:", error.message);
+    console.error("joinBattle error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error while joining battle",
@@ -133,12 +131,6 @@ const generateUniqueRoomCode = require('../utils/generateRoomCode.js')
   }
 };
 
-// ─────────────────────────────────────────────
-// GET /api/battle/:roomCode
-// ─────────────────────────────────────────────
-/**
- * Fetches a battle room's current state by room code.
- */
  const getBattle = async (req, res) => {
   try {
     const { roomCode } = req.params;

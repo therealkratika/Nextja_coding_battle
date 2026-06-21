@@ -1,4 +1,4 @@
-import Battle from "../models/Battle.js";
+const Battle = require("../model/battle.js");
 
 /**
  * Registers all Socket.io event handlers for battle room management.
@@ -355,4 +355,4 @@ const handlePlayerLeave = async ({ socket, io, roomCode, username, reason }) => 
   console.log(`👋 ${username} ${reason} from room: ${roomCode}`);
 };
 
-export default battleSocket;
+module.exports = battleSocket;
