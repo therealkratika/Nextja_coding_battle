@@ -153,7 +153,7 @@ export function useLobbyRoom(roomId: string, onBattleStarted: (roomCode: string)
     socket.on("battle-started", ({ battle: startedBattle, roomCode: emittedRoomCode }: BattleStartedPayload) => {
       setSuccessMessage(null);
       const targetRoomCode =
-        startedBattle?.roomCode || emittedRoomCode || battle?.roomCode || normalizedRoomId;
+        startedBattle?.roomCode || emittedRoomCode || normalizedRoomId;
       if (targetRoomCode) {
         onBattleStarted(targetRoomCode);
       }
@@ -170,10 +170,9 @@ export function useLobbyRoom(roomId: string, onBattleStarted: (roomCode: string)
 
     return () => {
       socket.off();
-      socket.disconnect();
       socketRef.current = null;
     };
-  }, [normalizedRoomId, currentUsername, onBattleStarted, battle]);
+  }, [normalizedRoomId, currentUsername, onBattleStarted]);
 
   const handleReady = async () => {
     if (!battle || !socketRef.current) {
