@@ -15,7 +15,7 @@ module.exports = async function handlePlayerLeave({ socket, io, roomCode, userna
       newHost: battle.host,
       message: `${battle.host} is now the host.`,
     });
-    console.log(`👑 Host transferred to: ${battle.host} in room: ${roomCode}`);
+    console.log(`Host transferred to: ${battle.host} in room: ${roomCode}`);
   }
 
   if (battle.players.length === 0) {
@@ -39,5 +39,5 @@ module.exports = async function handlePlayerLeave({ socket, io, roomCode, userna
     host: battle.host,
   });
 
-  console.log(`👋 ${username} ${reason} from room: ${roomCode}`);
+  console.log(`${username} ${reason} from room: ${roomCode}`);
 };

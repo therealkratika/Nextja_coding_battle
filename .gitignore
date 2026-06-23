@@ -12,10 +12,6 @@ backend/.env
 frontend/.next/
 frontend/out/
 
-# Build files
-frontend/dist/
-backend/dist/
-
 # Logs
 *.log
 npm-debug.log*
