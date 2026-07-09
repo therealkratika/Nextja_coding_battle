@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import { getBattle, getBattleQuestions, submitBattleCode } from "@/lib/api";
 import { BattleMeta, LeaderboardEntry, Question } from "./types";
 
 const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
@@ -12,60 +13,112 @@ interface BattleStartedPayload {
     roomCode?: string;
     difficulty?: BattleMeta["difficulty"];
     questionCount?: number;
+    startedAt?: string;
+    endsAt?: string;
   };
-  questions?: Question[];
-  timer?: number | string;
 }
 
 interface LeaderboardPayload {
-  leaderboard?: Array<{ username: string; score?: number }>;
+  leaderboard?: Array<{ username: string; score?: number; solvedCount?: number }>;
+}
+
+interface SubmissionPayload {
+  verdict?: string;
+  executionTime?: number;
+  memoryUsed?: number;
+  passedTests?: number;
+  totalTests?: number;
+  results?: Array<{
+    input: string;
+    expectedOutput: string;
+    actualOutput: string;
+    passed: boolean;
+    stderr: string;
+    stdout: string;
+  }>;
+  submission?: {
+    verdict?: string;
+    executionTime?: number;
+    memoryUsed?: number;
+    points?: number;
+    stdout?: string;
+    stderr?: string;
+  };
 }
 
 export function useBattleRoom(roomCode: string) {
-  const mockQuestions = useMemo<Question[]>(
-    () => [
-      {
-        id: "q1",
-        title: "Sum of Two Numbers",
-        difficulty: "Easy",
-        description: "Given two integers, return their sum.",
-        examples: ["Input: 1 2 -> Output: 3"],
-        constraints: ["-1000 <= a,b <= 1000"],
-      },
-      {
-        id: "q2",
-        title: "Reverse String",
-        difficulty: "Medium",
-        description: "Reverse the characters of a string.",
-        examples: ["Input: hello -> Output: olleh"],
-        constraints: ["1 <= s.length <= 1000"],
-      },
-      {
-        id: "q3",
-        title: "Unique Numbers",
-        difficulty: "Hard",
-        description: "Return count of unique numbers in an array.",
-        examples: ["Input: [1,2,2,3] -> Output: 3"],
-        constraints: ["0 <= n <= 10^5"],
-      },
-    ],
-    []
-  );
-
-  const [loading] = useState(false);
-  const [battleMeta, setBattleMeta] = useState<BattleMeta | null>({
-    battleName: "Coding Battle Arena",
-    roomCode: roomCode || "UNKNOWN",
-    difficulty: "Random",
-    totalQuestions: mockQuestions.length,
-  });
+  const [loading, setLoading] = useState(true);
+  const [battleMeta, setBattleMeta] = useState<BattleMeta | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [questions, setQuestions] = useState<Question[]>(mockQuestions);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [language, setLanguage] = useState("JavaScript");
-  const [editorCode, setEditorCode] = useState<string>("// Write your solution here\n");
+  const [editorCode, setEditorCodeState] = useState<string>("// Write your solution here\n");
+  const [submissionResult, setSubmissionResult] = useState<SubmissionPayload | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBattleEnded, setIsBattleEnded] = useState(false);
+  const [battleSummary, setBattleSummary] = useState<{ winner?: string; message?: string } | null>(null);
   const socketRef = useRef<Socket | null>(null);
+
+  const currentQuestion = questions[currentQuestionIndex] ?? null;
+
+  const getStorageKey = (questionId?: string, selectedLanguage = language) =>
+    `battle:${roomCode}:question:${questionId ?? "default"}:${selectedLanguage}`;
+
+  const persistCode = (value: string, questionId?: string, selectedLanguage = language) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(getStorageKey(questionId, selectedLanguage), value);
+  };
+
+  const restoreCode = (questionId?: string, selectedLanguage = language) => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(getStorageKey(questionId, selectedLanguage));
+  };
+
+  useEffect(() => {
+    if (!roomCode) return;
+
+    let cancelled = false;
+
+    async function bootstrapBattle() {
+      try {
+        const battle = await getBattle(roomCode);
+        if (cancelled) return;
+
+        setBattleMeta({
+          battleName: battle.battleName,
+          roomCode: battle.roomCode,
+          difficulty: battle.difficulty,
+          totalQuestions: battle.questionCount,
+        });
+
+        if (battle.status === "active" && battle.startedAt) {
+          const endsAt = new Date(battle.endedAt || Date.now()).getTime();
+          const secondsLeft = Math.max(0, Math.floor((endsAt - Date.now()) / 1000));
+          setTimeLeft(secondsLeft);
+          setIsBattleEnded(false);
+        }
+
+        const fetchedQuestions = await getBattleQuestions(roomCode);
+        if (!cancelled) {
+          setQuestions(fetchedQuestions as Question[]);
+        }
+      } catch (error) {
+        console.error("Failed to bootstrap battle", error);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    bootstrapBattle();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roomCode]);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -73,23 +126,29 @@ export function useBattleRoom(roomCode: string) {
     const socket = io(socketUrl, { transports: ["websocket"] });
     socketRef.current = socket;
 
-    socket.on("battle-started", (payload: BattleStartedPayload) => {
+    const username = typeof window !== "undefined" ? window.sessionStorage.getItem("username") || "spectator" : "spectator";
+
+    socket.on("battle-started", async (payload: BattleStartedPayload) => {
       if (payload?.battle) {
         const b = payload.battle;
         setBattleMeta((prev) => ({
           battleName: b.battleName || prev?.battleName || "Battle",
           roomCode: b.roomCode || prev?.roomCode || roomCode,
           difficulty: b.difficulty || prev?.difficulty || "Random",
-          totalQuestions: b.questionCount || prev?.totalQuestions || mockQuestions.length,
+          totalQuestions: b.questionCount || prev?.totalQuestions || 1,
         }));
+
+        if (b.endsAt) {
+          const secondsLeft = Math.max(0, Math.floor((new Date(b.endsAt).getTime() - Date.now()) / 1000));
+          setTimeLeft(secondsLeft);
+        }
       }
 
-      if (payload?.questions && Array.isArray(payload.questions)) {
-        setQuestions(payload.questions);
-      }
-
-      if (payload?.timer != null) {
-        setTimeLeft(Number(payload.timer));
+      try {
+        const fetchedQuestions = await getBattleQuestions(roomCode);
+        setQuestions(fetchedQuestions as Question[]);
+      } catch (error) {
+        console.error("Failed to fetch battle questions", error);
       }
     });
 
@@ -104,7 +163,9 @@ export function useBattleRoom(roomCode: string) {
       }
     });
 
-    socket.on("battle-ended", (payload: LeaderboardPayload) => {
+    socket.on("battle-ended", (payload: LeaderboardPayload & { message?: string; winner?: string }) => {
+      setIsBattleEnded(true);
+      setBattleSummary({ winner: payload?.winner, message: payload?.message });
       if (payload?.leaderboard && Array.isArray(payload.leaderboard)) {
         const normalized = payload.leaderboard.map((p, i) => ({
           rank: i + 1,
@@ -115,16 +176,25 @@ export function useBattleRoom(roomCode: string) {
       }
     });
 
-    socket.emit("join-room", { roomCode, username: "spectator" });
+    socket.on("submission-made", (payload: { verdict?: string; submission?: SubmissionPayload["submission"] }) => {
+      setSubmissionResult((prev) => ({
+        ...(prev || {}),
+        verdict: payload?.verdict || prev?.verdict,
+        submission: payload?.submission || prev?.submission,
+      }));
+    });
+
+    socket.emit("join-room", { roomCode, username });
 
     return () => {
       socket.off("battle-started");
       socket.off("leaderboard-updated");
       socket.off("battle-ended");
+      socket.off("submission-made");
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [roomCode, mockQuestions]);
+  }, [roomCode]);
 
   useEffect(() => {
     if (timeLeft == null || timeLeft <= 0) return;
@@ -134,6 +204,23 @@ export function useBattleRoom(roomCode: string) {
     return () => clearInterval(id);
   }, [timeLeft]);
 
+  useEffect(() => {
+    if (!roomCode || !currentQuestion?.id) return;
+
+    const saved = restoreCode(currentQuestion.id, language);
+    if (saved != null) {
+      setEditorCodeState(saved);
+      return;
+    }
+
+    const starterCode =
+      typeof currentQuestion?.starterCode === "object"
+        ? currentQuestion.starterCode?.[language] || ""
+        : "";
+
+    setEditorCodeState(starterCode || "// Write your solution here\n");
+  }, [currentQuestion?.id, language, roomCode]);
+
   function handlePrev() {
     setCurrentQuestionIndex((index) => Math.max(0, index - 1));
   }
@@ -142,12 +229,48 @@ export function useBattleRoom(roomCode: string) {
     setCurrentQuestionIndex((index) => Math.min(questions.length - 1, index + 1));
   }
 
-  function handleRunCode() {
-    console.log("Run code clicked", language, editorCode);
+  function handleCodeChange(value: string | undefined) {
+    const nextValue = value ?? "";
+    setEditorCodeState(nextValue);
+    persistCode(nextValue, currentQuestion?.id, language);
   }
 
-  function handleSubmitCode() {
-    console.log("Submit code clicked", language, editorCode);
+  function handleLanguageChange(nextLanguage: string) {
+    setLanguage(nextLanguage);
+    const starterCode =
+      typeof currentQuestion?.starterCode === "object"
+        ? currentQuestion.starterCode?.[nextLanguage] || ""
+        : "";
+    const saved = restoreCode(currentQuestion?.id, nextLanguage);
+    setEditorCodeState(saved ?? starterCode ?? "// Write your solution here\n");
+  }
+
+  async function handleRunCode() {
+    setSubmissionResult({ verdict: "Ready", executionTime: 0, memoryUsed: 0, passedTests: 0, totalTests: 0, results: [] });
+  }
+
+  async function handleSubmitCode() {
+    if (!roomCode || !currentQuestion?.id || isBattleEnded) return;
+
+    const username = typeof window !== "undefined" ? window.sessionStorage.getItem("username") || "Player" : "Player";
+    setIsSubmitting(true);
+
+    try {
+      const result = await submitBattleCode({
+        roomCode,
+        questionId: currentQuestion.id,
+        username,
+        language,
+        code: editorCode,
+      });
+
+      setSubmissionResult(result);
+    } catch (error) {
+      console.error("Submission failed", error);
+      setSubmissionResult({ verdict: "Submission Failed" });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return {
@@ -159,8 +282,13 @@ export function useBattleRoom(roomCode: string) {
     timeLeft,
     language,
     editorCode,
-    setLanguage,
-    setEditorCode,
+    submissionResult,
+    isSubmitting,
+    isBattleEnded,
+    battleSummary,
+    currentQuestion,
+    setLanguage: handleLanguageChange,
+    setEditorCode: handleCodeChange,
     handlePrev,
     handleNext,
     handleRunCode,

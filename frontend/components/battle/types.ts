@@ -18,6 +18,8 @@ export interface Question {
   description: string;
   examples?: string[];
   constraints?: string[];
+  starterCode?: Record<string, string>;
+  tags?: string[];
 }
 
 export interface BattleMeta {

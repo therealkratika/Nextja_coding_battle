@@ -6,6 +6,30 @@ import EditorPanel from "./EditorPanel";
 import Leaderboard from "./Leaderboard";
 import { BattleMeta, LeaderboardEntry, Question } from "./types";
 
+interface SubmissionResultShape {
+  verdict?: string;
+  executionTime?: number;
+  memoryUsed?: number;
+  passedTests?: number;
+  totalTests?: number;
+  results?: Array<{
+    input: string;
+    expectedOutput: string;
+    actualOutput: string;
+    passed: boolean;
+    stderr: string;
+    stdout: string;
+  }>;
+  submission?: {
+    verdict?: string;
+    executionTime?: number;
+    memoryUsed?: number;
+    points?: number;
+    stdout?: string;
+    stderr?: string;
+  };
+}
+
 interface BattleShellProps {
   battleMeta: BattleMeta | null;
   currentQuestionIndex: number;
@@ -21,6 +45,10 @@ interface BattleShellProps {
   onSubmit: () => void;
   onPrev: () => void;
   onNext: () => void;
+  submissionResult: SubmissionResultShape | null;
+  isSubmitting: boolean;
+  isBattleEnded: boolean;
+  battleSummary: { winner?: string; message?: string } | null;
 }
 
 export default function BattleShell({
@@ -38,6 +66,10 @@ export default function BattleShell({
   onSubmit,
   onPrev,
   onNext,
+  submissionResult,
+  isSubmitting,
+  isBattleEnded,
+  battleSummary,
 }: BattleShellProps) {
   const currentQuestion = questions[currentQuestionIndex] ?? null;
 
@@ -69,14 +101,86 @@ export default function BattleShell({
           </div>
 
           <div className="xl:w-9/20">
-            <EditorPanel
-              language={language}
-              code={code}
-              onLanguageChange={onLanguageChange}
-              onCodeChange={onCodeChange}
-              onRun={onRun}
-              onSubmit={onSubmit}
-            />
+            <div className="flex flex-col gap-4">
+              <EditorPanel
+                language={language}
+                code={code}
+                onLanguageChange={onLanguageChange}
+                onCodeChange={onCodeChange}
+                onRun={onRun}
+                onSubmit={onSubmit}
+                isSubmitting={isSubmitting}
+                isBattleEnded={isBattleEnded}
+              />
+
+              <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300">
+                {battleSummary ? (
+                  <div className="mb-3 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
+                    <div className="font-semibold">{battleSummary.message || "Battle complete"}</div>
+                    {battleSummary.winner ? <div className="mt-1">Winner: {battleSummary.winner}</div> : null}
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-zinc-500">Verdict</div>
+                    <div className="mt-1 font-semibold text-white">{submissionResult?.verdict || "Waiting for submission"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-zinc-500">Execution Time</div>
+                    <div className="mt-1 font-semibold text-white">{submissionResult?.executionTime ?? 0} ms</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-zinc-500">Memory Used</div>
+                    <div className="mt-1 font-semibold text-white">{submissionResult?.memoryUsed ?? 0} MB</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-zinc-500">Tests</div>
+                    <div className="mt-1 font-semibold text-white">{submissionResult?.passedTests ?? 0}/{submissionResult?.totalTests ?? 0}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="text-xs uppercase tracking-wide text-zinc-500">Latest Output</div>
+                  <pre className="max-h-28 overflow-auto rounded bg-black/70 p-3 text-xs text-zinc-200">
+                    {submissionResult?.submission?.stdout || submissionResult?.results?.[0]?.actualOutput || "No output yet"}
+                  </pre>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <h4 className="text-xs uppercase tracking-wide text-zinc-500">Compilation / Stderr</h4>
+                    <pre className="max-h-40 overflow-auto rounded bg-black/80 p-3 text-xs text-rose-300">
+                      {submissionResult?.submission?.stderr || "No errors"}
+                    </pre>
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs uppercase tracking-wide text-zinc-500">Failed Test Cases</h4>
+                    <div className="max-h-40 overflow-auto rounded bg-black/80 p-3 text-xs text-zinc-200">
+                      {submissionResult?.results && submissionResult.results.length > 0 ? (
+                        submissionResult.results
+                          .filter((r) => !r.passed)
+                          .map((r, i) => (
+                            <div key={i} className="mb-2">
+                              <div className="font-semibold">Input</div>
+                              <div className="whitespace-pre-wrap">{r.input}</div>
+                              <div className="font-semibold mt-1">Expected</div>
+                              <div className="whitespace-pre-wrap">{r.expectedOutput}</div>
+                              <div className="font-semibold mt-1">Actual</div>
+                              <div className="whitespace-pre-wrap text-rose-200">{r.actualOutput}</div>
+                              {r.stderr ? (
+                                <div className="mt-1 text-rose-300">Error: {r.stderr}</div>
+                              ) : null}
+                            </div>
+                          ))
+                      ) : (
+                        <div className="text-zinc-500">No failing test cases</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
           </div>
 
           <div className="xl:w-3/20">
@@ -102,12 +206,21 @@ export default function BattleShell({
           >
             Previous Question
           </button>
-          <button
-            onClick={onNext}
-            className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-sm"
-          >
-            Next Question
-          </button>
+          {currentQuestionIndex < (totalQuestions - 1) ? (
+            <button
+              onClick={onNext}
+              className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-sm"
+            >
+              Next Question
+            </button>
+          ) : (
+            <button
+              onClick={() => (window.location.href = `/battle/${battleMeta?.roomCode}/final`)}
+              className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-sm"
+            >
+              Exit to Final Leaderboard
+            </button>
+          )}
         </div>
       </footer>
     </main>

@@ -11,6 +11,8 @@ dotenv.config();
 const connectDB = require("./src/config/db");
 
 const battleRoutes = require("./src/routes/battleRoutes");
+const questionRoutes = require("./src/routes/questionRoutes");
+const submissionRoutes = require("./src/routes/submissionRoutes");
 
 const battleSocket = require("./src/socket/battleSocket");
 
@@ -43,6 +45,8 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/battle", battleRoutes);
+app.use("/api/questions", questionRoutes);
+app.use("/api/submission", submissionRoutes);
 
 const io = new Server(server, {
   cors: {
@@ -51,6 +55,8 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
+
+app.set("io", io);
 
 io.on("connection", (socket) => {
   battleSocket(socket, io);

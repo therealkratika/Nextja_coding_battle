@@ -16,24 +16,20 @@ module.exports = function registerJoinRoom(socket, io) {
         return socket.emit("error", { message: "Room not found." });
       }
 
-      if (battle.status !== "waiting") {
-        return socket.emit("error", {
-          message: "Cannot join — this battle has already started or ended.",
-        });
-      }
-
       const player = battle.players.find(
         (p) => p.username.toLowerCase() === username.trim().toLowerCase()
       );
 
-      if (!player) {
+      if (!player && battle.status === "waiting") {
         return socket.emit("error", {
           message: "Player not found in room. Please join via the join form first.",
         });
       }
 
-      player.socketId = socket.id;
-      await battle.save();
+      if (player) {
+        player.socketId = socket.id;
+        await battle.save();
+      }
 
       socket.join(normalizedCode);
 

@@ -17,6 +17,10 @@ export default function BattlePage() {
     timeLeft,
     language,
     editorCode,
+    submissionResult,
+    isSubmitting,
+    isBattleEnded,
+    battleSummary,
     setLanguage,
     setEditorCode,
     handlePrev,
@@ -49,6 +53,10 @@ export default function BattlePage() {
       onSubmit={handleSubmitCode}
       onPrev={handlePrev}
       onNext={handleNext}
+      submissionResult={submissionResult}
+      isSubmitting={isSubmitting}
+      isBattleEnded={isBattleEnded}
+      battleSummary={battleSummary}
     />
   );
 }

@@ -9,6 +9,8 @@ interface EditorPanelProps {
   onCodeChange: (value: string | undefined) => void;
   onRun: () => void;
   onSubmit: () => void;
+  isSubmitting?: boolean;
+  isBattleEnded?: boolean;
 }
 
 const languageMap: Record<string, string> = {
@@ -25,6 +27,8 @@ export default function EditorPanel({
   onCodeChange,
   onRun,
   onSubmit,
+  isSubmitting = false,
+  isBattleEnded = false,
 }: EditorPanelProps) {
   const editorLanguage = languageMap[language] ?? "javascript";
 
@@ -54,16 +58,17 @@ export default function EditorPanel({
           </button>
           <button
             onClick={onSubmit}
-            className="px-3 py-1 rounded bg-emerald-500 text-black font-medium hover:brightness-95 text-sm"
+            disabled={isSubmitting || isBattleEnded}
+            className="px-3 py-1 rounded bg-emerald-500 text-black font-medium hover:brightness-95 text-sm disabled:opacity-50"
           >
-            Submit Code
+            {isSubmitting ? "Submitting..." : "Submit Code"}
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden rounded border border-zinc-800 bg-black/80">
+        <div className="overflow-hidden rounded border border-zinc-800 bg-black/80">
         <Editor
-          height="100%"
+            height="60vh"
           defaultLanguage={editorLanguage}
           language={editorLanguage}
           value={code}
@@ -77,6 +82,7 @@ export default function EditorPanel({
             scrollBeyondLastLine: false,
             lineNumbers: "on",
             tabSize: 2,
+              readOnly: isBattleEnded,
           }}
         />
       </div>
