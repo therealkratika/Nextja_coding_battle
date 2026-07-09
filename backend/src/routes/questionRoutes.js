@@ -5,11 +5,13 @@ const {
   getQuestionById,
   updateQuestion,
   deleteQuestion,
+  getRandomQuestionList,
 } = require("../controller/questionController.js");
 
 const router = express.Router();
 
 router.post("/", createQuestion);
+router.get("/random", getRandomQuestionList);
 router.get("/", getQuestions);
 router.get("/:id", getQuestionById);
 router.put("/:id", updateQuestion);

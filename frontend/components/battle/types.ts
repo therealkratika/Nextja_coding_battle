@@ -11,12 +11,18 @@ export interface LeaderboardEntry {
   score: number;
 }
 
+export interface ExampleItem {
+  input: string;
+  output: string;
+  explanation?: string;
+}
+
 export interface Question {
   id: string;
   title: string;
   difficulty: "Easy" | "Medium" | "Hard" | "Random";
   description: string;
-  examples?: string[];
+  examples?: Array<ExampleItem | string>;
   constraints?: string[];
   starterCode?: Record<string, string>;
   tags?: string[];

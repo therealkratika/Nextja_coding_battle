@@ -32,8 +32,24 @@ export default function QuestionPanel({ question }: QuestionPanelProps) {
             <h4 className="text-sm font-medium text-zinc-400 mb-2">Examples</h4>
             <div className="space-y-2">
               {question.examples?.map((example, index) => (
-                <div key={index} className="bg-zinc-900 p-3 rounded text-sm">
-                  {example}
+                <div key={index} className="bg-zinc-900 p-3 rounded text-sm space-y-2">
+                  {typeof example === "string" ? (
+                    <div>{example}</div>
+                  ) : (
+                    <>
+                      <div>
+                        <strong>Input:</strong> {example.input}
+                      </div>
+                      <div>
+                        <strong>Output:</strong> {example.output}
+                      </div>
+                      {example.explanation ? (
+                        <div className="text-zinc-400">
+                          <strong>Explanation:</strong> {example.explanation}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               ))}
             </div>
