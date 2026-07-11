@@ -157,6 +157,84 @@ const getBattleQuestions = async (req, res) => {
   }
 };
 
+const getBattleSubmissions = async (req, res) => {
+  try {
+    const { roomCode } = req.params;
+    const battle = await Battle.findOne({ roomCode: roomCode.toUpperCase() });
+
+    if (!battle) {
+      return res.status(404).json({ success: false, message: "Battle room not found." });
+    }
+
+    const submissions = await Submission.find({ battleId: battle._id }).sort({ createdAt: 1 }).lean();
+    const questionDocs = await Question.find({ _id: { $in: battle.questions || [] } }).lean().select("title");
+    const questionMap = questionDocs.reduce((map, question) => {
+      map[question._id.toString()] = question.title;
+      return map;
+    }, {});
+
+    const latestByPlayerQuestion = {};
+    submissions.forEach((submission) => {
+      const username = submission.username || "";
+      const questionId = submission.questionId?.toString();
+      if (!username || !questionId) return;
+
+      const key = `${username}:${questionId}`;
+      if (!latestByPlayerQuestion[key] || new Date(submission.createdAt) > new Date(latestByPlayerQuestion[key].createdAt)) {
+        latestByPlayerQuestion[key] = submission;
+      }
+    });
+
+    const players = (battle.players || []).map((player) => {
+      const submissionsForPlayer = (battle.questions || [])
+        .map((questionId) => {
+          const key = `${player.username}:${questionId.toString()}`;
+          const submission = latestByPlayerQuestion[key];
+          if (!submission) return null;
+
+          return {
+            questionId: questionId.toString(),
+            questionTitle: questionMap[questionId.toString()] || "Question",
+            code: submission.code || "",
+            verdict: submission.verdict || "Unknown",
+            language: submission.language || "",
+            points: submission.points || 0,
+            createdAt: submission.createdAt,
+          };
+        })
+        .filter(Boolean);
+
+      return {
+        username: player.username,
+        submissions: submissionsForPlayer,
+      };
+    });
+
+    const allPlayersSubmitted = players.every(
+      (player) => player.submissions.length === (battle.questions || []).length
+    );
+
+    if (battle.status !== "completed" && !allPlayersSubmitted) {
+      return res.status(403).json({
+        success: false,
+        message: "Peer code review is available once all players have submitted or when the battle ends.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        battleStatus: battle.status,
+        revealAllowed: true,
+        players,
+      },
+    });
+  } catch (error) {
+    console.error("getBattleSubmissions error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch battle submissions." });
+  }
+};
+
 const leaveBattle = async (req, res) => {
   try {
     const { roomCode, username } = req.body;
@@ -195,86 +273,36 @@ const leaveBattle = async (req, res) => {
   }
 };
 
+const leaderboardService = require("../services/leaderboardService");
+
+async function getFinalLeaderboard(req, res) {
+  try {
+    const leaderboard =
+      await leaderboardService.getFinalLeaderboard(
+        req.params.roomCode
+      );
+
+    return res.status(200).json({
+      success: true,
+      data: leaderboard,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+}
+
 module.exports = {
   joinBattle,
   createBattle,
   leaveBattle,
   getBattle,
   getBattleQuestions,
+  getBattleSubmissions,
+  getFinalLeaderboard,
 };
 
-async function getFinalLeaderboard(req, res) {
-  try {
-    const { roomCode } = req.params;
-    const battle = await Battle.findOne({ roomCode: roomCode.toUpperCase() });
-    if (!battle) return res.status(404).json({ success: false, message: "Battle not found" });
-
-    const submissions = await Submission.find({ battleId: battle._id }).lean();
-
-    // gather questions and total test counts
-    const questions = await Question.find({ _id: { $in: battle.questions || [] } }).lean();
-    const questionTestCounts = {};
-    questions.forEach((q) => {
-      const total = (q.sampleTestCases || []).length + (q.hiddenTestCases || []).length;
-      questionTestCounts[q._id.toString()] = Math.max(1, total);
-    });
-
-    const players = (battle.players || []).map((p) => p.username);
-
-    const stats = players.map((username) => {
-      const byUser = submissions.filter((s) => s.username === username);
-      let totalPassed = 0;
-      let totalPossible = 0;
-      let fullSolved = 0;
-      let totalScore = 0;
-      let solveTimeSum = 0;
-
-      const perQuestionBest = {};
-
-      byUser.forEach((s) => {
-        const qid = s.questionId.toString();
-        const passed = s.passedCount || 0;
-        const total = s.totalTests || questionTestCounts[qid] || 1;
-        if (!perQuestionBest[qid] || perQuestionBest[qid].passed < passed) {
-          perQuestionBest[qid] = { passed, total, createdAt: s.createdAt };
-        }
-      });
-
-      Object.keys(perQuestionBest).forEach((qid) => {
-        const best = perQuestionBest[qid];
-        totalPassed += best.passed;
-        totalPossible += best.total;
-        const qPoints = Math.round((best.passed / Math.max(best.total, 1)) * 100);
-        totalScore += qPoints;
-        if (best.passed >= best.total) {
-          fullSolved += 1;
-          const solvedAt = new Date(best.createdAt).getTime();
-          const startAt = battle.startedAt ? new Date(battle.startedAt).getTime() : 0;
-          solveTimeSum += Math.max(0, solvedAt - startAt);
-        }
-      });
-
-      return {
-        username,
-        totalPassed,
-        totalPossible,
-        fullSolved,
-        totalScore,
-        solveTimeSum,
-      };
-    });
-
-    // sort by score desc, tiebreaker solveTimeSum asc
-    stats.sort((a, b) => {
-      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-      return a.solveTimeSum - b.solveTimeSum;
-    });
-
-    return res.status(200).json({ success: true, data: stats });
-  } catch (error) {
-    console.error("getFinalLeaderboard error:", error);
-    return res.status(500).json({ success: false, message: "Failed to compute final leaderboard" });
-  }
-}
-
-module.exports.getFinalLeaderboard = getFinalLeaderboard;

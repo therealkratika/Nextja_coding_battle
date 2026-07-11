@@ -11,6 +11,21 @@ export interface LeaderboardEntry {
   score: number;
 }
 
+export interface PlayerSubmission {
+  questionId: string;
+  questionTitle: string;
+  code: string;
+  verdict: string;
+  language: string;
+  points: number;
+  createdAt: string;
+}
+
+export interface PlayerSubmissions {
+  username: string;
+  submissions: PlayerSubmission[];
+}
+
 export interface ExampleItem {
   input: string;
   output: string;

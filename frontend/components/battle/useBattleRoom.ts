@@ -2,8 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { getBattle, getBattleQuestions, submitBattleCode } from "@/lib/api";
-import { BattleMeta, LeaderboardEntry, Question } from "./types";
+import { getBattle, getBattleQuestions, getBattleSubmissions, submitBattleCode } from "@/lib/api";
+import {
+  BattleMeta,
+  LeaderboardEntry,
+  PlayerSubmissions,
+  PlayerSubmission,
+  Question,
+} from "./types";
 
 const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
@@ -59,6 +65,12 @@ export function useBattleRoom(roomCode: string) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBattleEnded, setIsBattleEnded] = useState(false);
   const [battleSummary, setBattleSummary] = useState<{ winner?: string; message?: string } | null>(null);
+  const [peerReviewPlayers, setPeerReviewPlayers] = useState<PlayerSubmissions[]>([]);
+  const [peerReviewAllowed, setPeerReviewAllowed] = useState(false);
+  const [peerReviewLoading, setPeerReviewLoading] = useState(false);
+  const [peerReviewError, setPeerReviewError] = useState<string | null>(null);
+  const [selectedPeer, setSelectedPeer] = useState<string | null>(null);
+  const [selectedReviewSubmission, setSelectedReviewSubmission] = useState<PlayerSubmission | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   const currentQuestion = questions[currentQuestionIndex] ?? null;
@@ -128,6 +140,30 @@ export function useBattleRoom(roomCode: string) {
 
     const username = typeof window !== "undefined" ? window.sessionStorage.getItem("username") || "spectator" : "spectator";
 
+    async function fetchPeerReview() {
+      setPeerReviewLoading(true);
+      setPeerReviewError(null);
+      try {
+        const response = await getBattleSubmissions(roomCode);
+        setPeerReviewPlayers(response.players || []);
+        setPeerReviewAllowed(!!response.revealAllowed);
+        if (response.players && response.players.length > 0) {
+          const firstPlayer = response.players[0];
+          setSelectedPeer((prev) => prev || firstPlayer.username);
+          if (firstPlayer.submissions && firstPlayer.submissions.length > 0) {
+            setSelectedReviewSubmission((prev) => prev || firstPlayer.submissions[0]);
+          }
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Failed to load peer review";
+        setPeerReviewError(message);
+        setPeerReviewAllowed(false);
+        setPeerReviewPlayers([]);
+      } finally {
+        setPeerReviewLoading(false);
+      }
+    }
+
     socket.on("battle-started", async (payload: BattleStartedPayload) => {
       if (payload?.battle) {
         const b = payload.battle;
@@ -174,6 +210,7 @@ export function useBattleRoom(roomCode: string) {
         }));
         setLeaderboard(normalized);
       }
+      fetchPeerReview();
     });
 
     socket.on("submission-made", (payload: { verdict?: string; submission?: SubmissionPayload["submission"] }) => {
@@ -182,9 +219,11 @@ export function useBattleRoom(roomCode: string) {
         verdict: payload?.verdict || prev?.verdict,
         submission: payload?.submission || prev?.submission,
       }));
+      fetchPeerReview();
     });
 
     socket.emit("join-room", { roomCode, username });
+    fetchPeerReview();
 
     return () => {
       socket.off("battle-started");
@@ -244,7 +283,19 @@ export function useBattleRoom(roomCode: string) {
     const saved = restoreCode(currentQuestion?.id, nextLanguage);
     setEditorCodeState(saved ?? starterCode ?? "// Write your solution here\n");
   }
+  function handleSelectPeer(username: string) {
+    const nextPlayer = peerReviewPlayers.find((player) => player.username === username);
+    setSelectedPeer(username);
+    if (nextPlayer?.submissions?.length) {
+      setSelectedReviewSubmission(nextPlayer.submissions[0]);
+    } else {
+      setSelectedReviewSubmission(null);
+    }
+  }
 
+  function handleSelectReviewSubmission(submission: PlayerSubmission) {
+    setSelectedReviewSubmission(submission);
+  }
   async function handleRunCode() {
     setSubmissionResult({ verdict: "Ready", executionTime: 0, memoryUsed: 0, passedTests: 0, totalTests: 0, results: [] });
   }
@@ -286,6 +337,12 @@ export function useBattleRoom(roomCode: string) {
     isSubmitting,
     isBattleEnded,
     battleSummary,
+    peerReviewPlayers,
+    peerReviewAllowed,
+    peerReviewLoading,
+    peerReviewError,
+    selectedPeer,
+    selectedReviewSubmission,
     currentQuestion,
     setLanguage: handleLanguageChange,
     setEditorCode: handleCodeChange,
@@ -293,5 +350,7 @@ export function useBattleRoom(roomCode: string) {
     handleNext,
     handleRunCode,
     handleSubmitCode,
+    handleSelectPeer,
+    handleSelectReviewSubmission,
   };
 }

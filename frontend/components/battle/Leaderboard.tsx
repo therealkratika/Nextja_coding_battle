@@ -10,7 +10,7 @@ export default function Leaderboard({ leaderboard }: LeaderboardProps) {
   const isEmpty = leaderboard.length === 0;
 
   return (
-    <aside className="w-full h-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 overflow-auto">
+    <aside className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 overflow-auto">
       <h4 className="text-sm text-zinc-400 mb-3">Live Leaderboard</h4>
 
       {isEmpty ? (

@@ -62,7 +62,7 @@ io.on("connection", (socket) => {
   battleSocket(socket, io);
 });
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5002;
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on ${PORT}`);

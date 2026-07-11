@@ -21,12 +21,20 @@ export default function BattlePage() {
     isSubmitting,
     isBattleEnded,
     battleSummary,
+    peerReviewPlayers,
+    peerReviewAllowed,
+    peerReviewLoading,
+    peerReviewError,
+    selectedPeer,
+    selectedReviewSubmission,
     setLanguage,
     setEditorCode,
     handlePrev,
     handleNext,
     handleRunCode,
     handleSubmitCode,
+    handleSelectPeer,
+    handleSelectReviewSubmission,
   } = useBattleRoom(roomCode);
 
   if (loading) {
@@ -57,6 +65,14 @@ export default function BattlePage() {
       isSubmitting={isSubmitting}
       isBattleEnded={isBattleEnded}
       battleSummary={battleSummary}
+      peerReviewPlayers={peerReviewPlayers}
+      peerReviewAllowed={peerReviewAllowed}
+      peerReviewLoading={peerReviewLoading}
+      peerReviewError={peerReviewError}
+      selectedPeer={selectedPeer}
+      selectedReviewSubmission={selectedReviewSubmission}
+      onSelectPeer={handleSelectPeer}
+      onSelectReviewSubmission={handleSelectReviewSubmission}
     />
   );
 }

@@ -1,10 +1,5 @@
-/**
- * Battle Arena API Client
- * Handles all communication with the backend server
- */
 
-// Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5002";
 const API_ENDPOINT = `${API_BASE_URL}/api/battle`;
 const QUESTION_ENDPOINT = `${API_BASE_URL}/api/questions`;
 const SUBMISSION_ENDPOINT = `${API_BASE_URL}/api/submission`;
@@ -79,6 +74,25 @@ export interface SubmissionPayload {
     stdout: string;
   }>;
   leaderboard: Array<{ username: string; score: number }>;
+}
+
+export interface PlayerSubmission {
+  questionId: string;
+  questionTitle: string;
+  code: string;
+  verdict: string;
+  language: string;
+  points: number;
+  createdAt: string;
+}
+
+export interface PlayerSubmissionsResponse {
+  battleStatus: string;
+  revealAllowed: boolean;
+  players: Array<{
+    username: string;
+    submissions: PlayerSubmission[];
+  }>;
 }
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
@@ -274,6 +288,20 @@ export async function submitBattleCode(payload: {
 
   if (!response.data) {
     throw new ApiError(500, "No submission result returned from server");
+  }
+
+  return response.data;
+}
+
+export async function getBattleSubmissions(roomCode: string): Promise<PlayerSubmissionsResponse> {
+  const response = await apiRequest<ApiResponse<PlayerSubmissionsResponse>>(
+    `/${roomCode.toUpperCase()}/submissions`,
+    { method: "GET" },
+    API_ENDPOINT
+  );
+
+  if (!response.data) {
+    throw new ApiError(500, "No submission review data returned from server");
   }
 
   return response.data;

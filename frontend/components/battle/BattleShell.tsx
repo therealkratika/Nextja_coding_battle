@@ -4,7 +4,8 @@ import BattleHeader from "./BattleHeader";
 import QuestionPanel from "./QuestionPanel";
 import EditorPanel from "./EditorPanel";
 import Leaderboard from "./Leaderboard";
-import { BattleMeta, LeaderboardEntry, Question } from "./types";
+import PeerReviewPanel from "./PeerReviewPanel";
+import { BattleMeta, LeaderboardEntry, PlayerSubmission, PlayerSubmissions, Question } from "./types";
 
 interface SubmissionResultShape {
   verdict?: string;
@@ -49,6 +50,14 @@ interface BattleShellProps {
   isSubmitting: boolean;
   isBattleEnded: boolean;
   battleSummary: { winner?: string; message?: string } | null;
+  peerReviewPlayers: PlayerSubmissions[];
+  peerReviewAllowed: boolean;
+  peerReviewLoading: boolean;
+  peerReviewError: string | null;
+  selectedPeer: string | null;
+  selectedReviewSubmission: PlayerSubmission | null;
+  onSelectPeer: (username: string) => void;
+  onSelectReviewSubmission: (submission: PlayerSubmission) => void;
 }
 
 export default function BattleShell({
@@ -70,6 +79,14 @@ export default function BattleShell({
   isSubmitting,
   isBattleEnded,
   battleSummary,
+  peerReviewPlayers,
+  peerReviewAllowed,
+  peerReviewLoading,
+  peerReviewError,
+  selectedPeer,
+  selectedReviewSubmission,
+  onSelectPeer,
+  onSelectReviewSubmission,
 }: BattleShellProps) {
   const currentQuestion = questions[currentQuestionIndex] ?? null;
 
@@ -184,7 +201,19 @@ export default function BattleShell({
           </div>
 
           <div className="xl:w-3/20">
-            <Leaderboard leaderboard={leaderboard} />
+            <div className="space-y-4">
+              <Leaderboard leaderboard={leaderboard} />
+              <PeerReviewPanel
+                players={peerReviewPlayers}
+                selectedPlayer={selectedPeer}
+                selectedSubmission={selectedReviewSubmission}
+                allowed={peerReviewAllowed}
+                loading={peerReviewLoading}
+                error={peerReviewError}
+                onSelectPlayer={onSelectPeer}
+                onSelectSubmission={onSelectReviewSubmission}
+              />
+            </div>
           </div>
         </div>
       </div>
