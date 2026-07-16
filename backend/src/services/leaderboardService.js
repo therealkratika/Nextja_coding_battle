@@ -42,15 +42,6 @@ async function getFinalLeaderboard(roomCode) {
     submissionsByUser[submission.username].push(submission);
   });
 
-  /**
-   * IMPORTANT
-   *
-   * Do NOT use battle.players.
-   * battle.players changes when users disconnect.
-   *
-   * Build the leaderboard from everyone who participated.
-   */
-
   const playerUsernames = [
     ...new Set([
       ...(battle.players || []).map((p) => p.username),
