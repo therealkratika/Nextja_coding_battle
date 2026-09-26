@@ -52,10 +52,7 @@ The API client includes:
 - User-friendly error messages
 
 ### Configuration
-Backend API URL is configured via `NEXT_PUBLIC_API_URL` environment variable in `.env.local`:
-```
-NEXT_PUBLIC_API_URL=http://localhost:5001
-```
+The frontend uses `https://nextja-coding-battle.onrender.com` as its backend API and socket server URL.
 
 ## Usage Example
 ```typescript
@@ -85,6 +82,6 @@ The official public Piston API now requires authorization. To use it, set `PISTO
 
 ## Next Steps
 1. Seed the question database with `cd backend && npm run seed:questions` (safe to run repeatedly).
-2. Ensure backend is running on `http://localhost:5001`
+2. Ensure the backend is available at `https://nextja-coding-battle.onrender.com`
 3. Test battle creation and joining flows
-4. Configure `NEXT_PUBLIC_API_URL` for the production backend URL
+4. Keep the frontend API and socket URLs pointed at the deployed backend

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ApiError } from "@/lib/api";
+import { ApiError, API_BASE_URL } from "@/lib/api";
 
 interface FinalRow {
   username: string;
@@ -31,7 +31,7 @@ export default function FinalLeaderboardPage() {
   useEffect(() => {
     if (!roomCode) return;
     setLoading(true);
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"}/api/battle/${roomCode}/final-leaderboard`)
+    fetch(`${API_BASE_URL}/api/battle/${roomCode}/final-leaderboard`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.success) throw new Error(data.message || "Failed");

@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { getBattle, Battle, ApiError } from "@/lib/api";
-
-const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+import { getBattle, Battle, ApiError, API_BASE_URL } from "@/lib/api";
 
 interface RoomJoinedPayload {
   battle?: Battle;
@@ -110,7 +108,7 @@ export function useLobbyRoom(roomId: string, onBattleStarted: (roomCode: string)
       return;
     }
 
-    const socket = io(socketUrl, {
+    const socket = io(API_BASE_URL, {
       transports: ["websocket"],
       autoConnect: true,
     });

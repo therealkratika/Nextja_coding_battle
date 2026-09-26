@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { ApiError, getBattle, getBattleQuestions, getBattleSubmissions, submitBattleCode } from "@/lib/api";
+import { ApiError, getBattle, getBattleQuestions, getBattleSubmissions, submitBattleCode, API_BASE_URL } from "@/lib/api";
 import {
   BattleMeta,
   LeaderboardEntry,
@@ -10,8 +10,6 @@ import {
   PlayerSubmission,
   Question,
 } from "./types";
-
-const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
 interface BattleStartedPayload {
   battle?: {
@@ -143,7 +141,7 @@ export function useBattleRoom(roomCode: string) {
   useEffect(() => {
     if (!roomCode) return;
 
-    const socket = io(socketUrl, { transports: ["websocket"] });
+    const socket = io(API_BASE_URL, { transports: ["websocket"] });
     socketRef.current = socket;
 
     const username = typeof window !== "undefined" ? window.sessionStorage.getItem("username") || "spectator" : "spectator";

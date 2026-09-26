@@ -1,7 +1,6 @@
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+export const API_BASE_URL = "https://nextja-coding-battle.onrender.com";
 const API_ENDPOINT = `${API_BASE_URL}/api/battle`;
-const QUESTION_ENDPOINT = `${API_BASE_URL}/api/questions`;
 const SUBMISSION_ENDPOINT = `${API_BASE_URL}/api/submission`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
