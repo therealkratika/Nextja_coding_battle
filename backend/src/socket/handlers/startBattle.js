@@ -1,6 +1,5 @@
 const Battle = require("../../model/battle.js");
 const Question = require("../../model/question.js");
-
 function shuffleArray(items) {
   const copy = [...items];
   for (let index = copy.length - 1; index > 0; index -= 1) {
@@ -9,70 +8,69 @@ function shuffleArray(items) {
   }
   return copy;
 }
-
 module.exports = function registerStartBattle(socket, io) {
-  socket.on("start-battle", async ({ roomCode, host }) => {
+  socket.on("start-battle", async ({
+    roomCode,
+    host
+  }) => {
     try {
       if (!roomCode || !host) {
-        return socket.emit("error", { message: "roomCode and host are required." });
+        return socket.emit("error", {
+          message: "roomCode and host are required."
+        });
       }
-
       const normalizedCode = roomCode.trim().toUpperCase();
-      const battle = await Battle.findOne({ roomCode: normalizedCode });
-
+      const battle = await Battle.findOne({
+        roomCode: normalizedCode
+      });
       if (!battle) {
-        return socket.emit("error", { message: "Room not found." });
+        return socket.emit("error", {
+          message: "Room not found."
+        });
       }
-
       if (battle.host.toLowerCase() !== host.trim().toLowerCase()) {
         return socket.emit("error", {
-          message: "Only the host can start the battle.",
+          message: "Only the host can start the battle."
         });
       }
-
       if (battle.players.length < 2) {
         return socket.emit("error", {
-          message: "Need at least 2 players to start the battle.",
+          message: "Need at least 2 players to start the battle."
         });
       }
-
-      const notReady = battle.players.filter((player) => !player.ready);
+      const notReady = battle.players.filter(player => !player.ready);
       if (notReady.length > 0) {
-        const names = notReady.map((player) => player.username).join(", ");
+        const names = notReady.map(player => player.username).join(", ");
         return socket.emit("error", {
-          message: `These players are not ready yet: ${names}`,
+          message: `These players are not ready yet: ${names}`
         });
       }
-
       if (battle.status !== "waiting") {
-        return socket.emit("error", { message: "Battle has already started." });
+        return socket.emit("error", {
+          message: "Battle has already started."
+        });
       }
-
       const filter = {
         isActive: true,
-        ...(battle.difficulty && battle.difficulty !== "Random"
-          ? { difficulty: battle.difficulty }
-          : {}),
+        ...(battle.difficulty && battle.difficulty !== "Random" ? {
+          difficulty: battle.difficulty
+        } : {})
       };
       const availableQuestions = await Question.find(filter).lean();
       const questionCount = battle.questionCount || 1;
-
       if (availableQuestions.length < questionCount) {
         return socket.emit("error", {
-          message: `Only ${availableQuestions.length} active question(s) are available for this battle. Add at least ${questionCount} matching question(s) before starting.`,
+          message: `Only ${availableQuestions.length} active question(s) are available for this battle. Add at least ${questionCount} matching question(s) before starting.`
         });
       }
-
       const selectedQuestions = shuffleArray(availableQuestions).slice(0, questionCount);
-
       battle.status = "active";
       battle.startedAt = new Date();
       battle.endedAt = new Date(Date.now() + battle.timeLimit * 60 * 1000);
-      battle.questions = selectedQuestions.map((question) => question._id);
+      battle.questions = selectedQuestions.map(question => question._id);
       battle.currentQuestion = 0;
       battle.winner = null;
       await battle.save();
-
       io.to(normalizedCode).emit("battle-started", {
         message: "The battle has begun! Good luck! ⚔️",
         roomCode: normalizedCode,
@@ -83,39 +81,39 @@ module.exports = function registerStartBattle(socket, io) {
           difficulty: battle.difficulty,
           battleName: battle.battleName,
           startedAt: battle.startedAt,
-          endsAt: battle.endedAt,
-        },
+          endsAt: battle.endedAt
+        }
       });
-
       const endBattle = async () => {
-        const currentBattle = await Battle.findOne({ roomCode: normalizedCode });
+        const currentBattle = await Battle.findOne({
+          roomCode: normalizedCode
+        });
         if (!currentBattle || currentBattle.status !== "active") {
           return;
         }
-
         const sortedPlayers = [...currentBattle.players].sort((a, b) => (b.score || 0) - (a.score || 0));
         currentBattle.status = "completed";
         currentBattle.endedAt = new Date();
         currentBattle.winner = sortedPlayers[0]?.username || null;
         await currentBattle.save();
-
-        const leaderboard = currentBattle.players
-          .map((player) => ({ username: player.username, score: player.score || 0, solvedCount: player.solvedCount || 0 }))
-          .sort((a, b) => b.score - a.score);
-
+        const leaderboard = currentBattle.players.map(player => ({
+          username: player.username,
+          score: player.score || 0,
+          solvedCount: player.solvedCount || 0
+        })).sort((a, b) => b.score - a.score);
         io.to(normalizedCode).emit("battle-ended", {
           message: "The battle has ended.",
           winner: currentBattle.winner,
-          leaderboard,
+          leaderboard
         });
       };
-
       setTimeout(endBattle, battle.timeLimit * 60 * 1000);
-
       console.log(`⚔️  Battle STARTED in room: ${normalizedCode} (host: ${host})`);
     } catch (error) {
       console.error("start-battle error:", error?.message || error);
-      socket.emit("error", { message: "Server error while starting battle." });
+      socket.emit("error", {
+        message: "Server error while starting battle."
+      });
     }
   });
 };

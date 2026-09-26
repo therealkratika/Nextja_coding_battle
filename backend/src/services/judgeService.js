@@ -1,28 +1,20 @@
-const { executeCode } = require("./pistonService");
-
+const {
+  executeCode
+} = require("./pistonService");
 async function judgeSubmission({
   code,
   language,
-  question,
+  question
 }) {
-  const hiddenTests =
-    question.hiddenTestCases || [];
-
+  const hiddenTests = question.hiddenTestCases || [];
   if (hiddenTests.length === 0) {
-    throw new Error(
-      "No hidden test cases found."
-    );
+    throw new Error("No hidden test cases found.");
   }
-
   let passedCount = 0;
-
   let executionTime = 0;
   let memoryUsed = 0;
-
   const results = [];
-
   let verdict = "Accepted";
-
   let stdout = "";
   let stderr = "";
 
@@ -36,25 +28,12 @@ async function judgeSubmission({
     const response = await executeCode({
       language,
       code,
-      stdin: testCase.input || "",
+      stdin: testCase.input || ""
     });
-
     stdout = response.stdout || "";
     stderr = response.stderr || "";
-
-    executionTime = Math.max(
-      executionTime,
-      Number(
-        response.executionTime || 0
-      )
-    );
-
-    memoryUsed = Math.max(
-      memoryUsed,
-      Number(
-        response.memoryUsed || 0
-      )
-    );
+    executionTime = Math.max(executionTime, Number(response.executionTime || 0));
+    memoryUsed = Math.max(memoryUsed, Number(response.memoryUsed || 0));
 
     /*
      * =================================
@@ -62,28 +41,15 @@ async function judgeSubmission({
      * =================================
      */
 
-    if (
-      response.status ===
-      "Compilation Error"
-    ) {
+    if (response.status === "Compilation Error") {
       verdict = "Compilation Error";
-
       results.push({
         input: testCase.input || "",
-
-        expectedOutput:
-          testCase.expectedOutput || "",
-
+        expectedOutput: testCase.expectedOutput || "",
         actualOutput: "",
-
         passed: false,
-
         stdout: "",
-
-        stderr:
-          response.compileOutput ||
-          response.stderr ||
-          "",
+        stderr: response.compileOutput || response.stderr || ""
       });
 
       // No point running remaining tests
@@ -96,26 +62,15 @@ async function judgeSubmission({
      * =================================
      */
 
-    if (
-      response.status ===
-      "Runtime Error"
-    ) {
+    if (response.status === "Runtime Error") {
       verdict = "Runtime Error";
-
       results.push({
         input: testCase.input || "",
-
-        expectedOutput:
-          testCase.expectedOutput || "",
-
-        actualOutput:
-          stdout.trim(),
-
+        expectedOutput: testCase.expectedOutput || "",
+        actualOutput: stdout.trim(),
         passed: false,
-
         stdout,
-
-        stderr,
+        stderr
       });
 
       // Stop because program already failed
@@ -128,37 +83,21 @@ async function judgeSubmission({
      * =================================
      */
 
-    const actualOutput =
-      stdout.trim();
-
-    const expectedOutput =
-      (
-        testCase.expectedOutput ||
-        ""
-      ).trim();
-
-    const passed =
-      actualOutput ===
-      expectedOutput;
-
+    const actualOutput = stdout.trim();
+    const expectedOutput = (testCase.expectedOutput || "").trim();
+    const passed = actualOutput === expectedOutput;
     if (passed) {
       passedCount++;
     } else {
       verdict = "Wrong Answer";
     }
-
     results.push({
       input: testCase.input || "",
-
       expectedOutput,
-
       actualOutput,
-
       passed,
-
       stdout,
-
-      stderr,
+      stderr
     });
 
     /*
@@ -179,14 +118,7 @@ async function judgeSubmission({
    * =================================
    */
 
-  if (
-    passedCount ===
-      hiddenTests.length &&
-    verdict !==
-      "Compilation Error" &&
-    verdict !==
-      "Runtime Error"
-  ) {
+  if (passedCount === hiddenTests.length && verdict !== "Compilation Error" && verdict !== "Runtime Error") {
     verdict = "Accepted";
   }
 
@@ -196,11 +128,7 @@ async function judgeSubmission({
    * =================================
    */
 
-  const points = Math.round(
-    (passedCount /
-      hiddenTests.length) *
-      100
-  );
+  const points = Math.round(passedCount / hiddenTests.length * 100);
 
   /*
    * =================================
@@ -208,10 +136,7 @@ async function judgeSubmission({
    * =================================
    */
 
-  const failedTestCase =
-    results.find(
-      (result) => !result.passed
-    ) || null;
+  const failedTestCase = results.find(result => !result.passed) || null;
 
   /*
    * =================================
@@ -221,28 +146,17 @@ async function judgeSubmission({
 
   return {
     verdict,
-
     points,
-
     passedCount,
-
-    totalTests:
-      hiddenTests.length,
-
+    totalTests: hiddenTests.length,
     executionTime,
-
     memoryUsed,
-
     stdout,
-
     stderr,
-
     failedTestCase,
-
-    results,
+    results
   };
 }
-
 module.exports = {
-  judgeSubmission,
+  judgeSubmission
 };
