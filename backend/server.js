@@ -21,10 +21,11 @@ connectDB();
 const app = express();
 
 const server = http.createServer(app);
+const FRONTEND_ORIGIN = "https://nextja-coding-battle.vercel.app";
 
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: FRONTEND_ORIGIN,
 
     methods: [
       "GET",
@@ -50,7 +51,7 @@ app.use("/api/submission", submissionRoutes);
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: FRONTEND_ORIGIN,
 
     methods: ["GET", "POST"],
   },
