@@ -122,10 +122,17 @@ for (let index = 1; index <= 100; index += 1) {
 async function seedQuestions() {
   try {
     await connectDB();
-    await Question.collection.dropIndexes();
-    await Question.deleteMany({});
-    await Question.insertMany(questions, { ordered: false });
-    console.log(`Seeded ${questions.length} questions`);
+    const result = await Question.bulkWrite(
+      questions.map((question) => ({
+        updateOne: {
+          filter: { slug: question.slug },
+          update: { $setOnInsert: question },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
+    console.log(`Seeded ${result.upsertedCount} new questions`);
     process.exit(0);
   } catch (error) {
     console.error(error);
