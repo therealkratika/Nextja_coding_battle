@@ -32,9 +32,6 @@ export default function Hero() {
           </a>
         </div>
 
-        <button className="text-sm text-white/50 hover:text-white border border-white/10 hover:border-white/30 px-4 py-2 rounded-lg transition-all backdrop-blur-sm">
-          Sign in
-        </button>
       </nav>
 
       <main className="relative z-10 flex flex-col items-center justify-center text-center px-6 pt-16 pb-36">

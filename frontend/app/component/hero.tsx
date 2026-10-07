@@ -27,9 +27,6 @@ export default function Hero() {
           <a href="#" className="hover:text-white transition-colors">Community</a>
         </div>
 
-        <button className="text-sm text-white/50 hover:text-white border border-white/10 hover:border-white/30 px-4 py-2 rounded-lg transition-all backdrop-blur-sm">
-          Sign in
-        </button>
       </nav>
 
       {/* ── HERO CONTENT ── */}
