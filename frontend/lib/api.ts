@@ -1,5 +1,5 @@
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5002";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 const API_ENDPOINT = `${API_BASE_URL}/api/battle`;
 const QUESTION_ENDPOINT = `${API_BASE_URL}/api/questions`;
 const SUBMISSION_ENDPOINT = `${API_BASE_URL}/api/submission`;
@@ -129,10 +129,15 @@ async function apiRequest<T>(
     const data = await response.json();
 
     if (!response.ok) {
+      const message =
+        data.message ||
+        data.error ||
+        "An error occurred while making the request";
+
       throw new ApiError(
         response.status,
-        data.message || "An error occurred while making the request",
-        data.message
+        message,
+        data.message || data.error
       );
     }
 
