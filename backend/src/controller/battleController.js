@@ -215,9 +215,13 @@ const getBattleSubmissions = async (req, res) => {
     );
 
     if (battle.status !== "completed" && !allPlayersSubmitted) {
-      return res.status(403).json({
-        success: false,
-        message: "Peer code review is available once all players have submitted or when the battle ends.",
+      return res.status(200).json({
+        success: true,
+        data: {
+          battleStatus: battle.status,
+          revealAllowed: false,
+          players: [],
+        },
       });
     }
 
@@ -305,4 +309,3 @@ module.exports = {
   getBattleSubmissions,
   getFinalLeaderboard,
 };
-
