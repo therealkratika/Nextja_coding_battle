@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { getBattle, getBattleQuestions, getBattleSubmissions, submitBattleCode } from "@/lib/api";
+import { ApiError, getBattle, getBattleQuestions, getBattleSubmissions, submitBattleCode } from "@/lib/api";
 import {
   BattleMeta,
   LeaderboardEntry,
@@ -54,6 +54,7 @@ interface SubmissionPayload {
 
 export function useBattleRoom(roomCode: string) {
   const [loading, setLoading] = useState(true);
+  const [battleError, setBattleError] = useState<string | null>(null);
   const [battleMeta, setBattleMeta] = useState<BattleMeta | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -98,6 +99,7 @@ export function useBattleRoom(roomCode: string) {
         const battle = await getBattle(roomCode);
         if (cancelled) return;
 
+        setBattleError(null);
         setBattleMeta({
           battleName: battle.battleName,
           roomCode: battle.roomCode,
@@ -117,7 +119,13 @@ export function useBattleRoom(roomCode: string) {
           setQuestions(fetchedQuestions as Question[]);
         }
       } catch (error) {
-        console.error("Failed to bootstrap battle", error);
+        if (!cancelled) {
+          setBattleError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load the battle room."
+          );
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -155,6 +163,13 @@ export function useBattleRoom(roomCode: string) {
           }
         }
       } catch (error: unknown) {
+        if (error instanceof ApiError && error.status === 403) {
+          setPeerReviewError(null);
+          setPeerReviewAllowed(false);
+          setPeerReviewPlayers([]);
+          return;
+        }
+
         const message = error instanceof Error ? error.message : "Failed to load peer review";
         setPeerReviewError(message);
         setPeerReviewAllowed(false);
@@ -183,8 +198,13 @@ export function useBattleRoom(roomCode: string) {
       try {
         const fetchedQuestions = await getBattleQuestions(roomCode);
         setQuestions(fetchedQuestions as Question[]);
+        setBattleError(null);
       } catch (error) {
-        console.error("Failed to fetch battle questions", error);
+        setBattleError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load battle questions."
+        );
       }
     });
 
@@ -317,8 +337,15 @@ export function useBattleRoom(roomCode: string) {
 
       setSubmissionResult(result);
     } catch (error) {
-      console.error("Submission failed", error);
-      setSubmissionResult({ verdict: "Submission Failed" });
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Submission failed. Please try again.";
+
+      setSubmissionResult({
+        verdict: "Submission Failed",
+        submission: { stderr: message },
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -326,6 +353,7 @@ export function useBattleRoom(roomCode: string) {
 
   return {
     loading,
+    battleError,
     battleMeta,
     currentQuestionIndex,
     questions,
