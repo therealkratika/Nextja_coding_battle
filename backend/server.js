@@ -18,6 +18,13 @@ const recoverBattles = require("./src/services/recoverBattles");
 
 const app = express();
 const server = http.createServer(app);
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
+
+if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0) {
+  throw new Error("TRUST_PROXY_HOPS must be a non-negative integer.");
+}
+
+app.set("trust proxy", trustProxyHops);
 
 const DEFAULT_FRONTEND_ORIGINS = [
   "http://localhost:3000",

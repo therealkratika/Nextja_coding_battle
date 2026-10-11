@@ -453,12 +453,19 @@ PORT=5001
 MONGO_URI=your_mongodb_uri
 FRONTEND_URL=http://localhost:3000,https://nextja-coding-battle.vercel.app
 PISTON_URL=http://localhost:2000/api/v2/execute
+TRUST_PROXY_HOPS=0
 ```
 
 `FRONTEND_URL` accepts a comma-separated list of frontend origins. The backend
 allows localhost and the deployed Vercel origin by default; set this variable
 when deploying to different frontend URLs. Include both local and deployed
 origins when you want both to access the same backend.
+
+Rate limits are 10 submissions, 5 room creations, and 10 room join attempts
+per minute per authenticated user ID, or per client IP when authentication is
+not configured. `TRUST_PROXY_HOPS` defaults to `0`; configure it to the number
+of trusted reverse proxies in front of the backend hosting so IP-based limits
+use the client address. Do not trust proxy headers from untrusted clients.
 
 > Never commit `.env` files, database credentials, API keys, or other secrets to GitHub.
 
