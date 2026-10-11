@@ -434,20 +434,31 @@ If Piston is running correctly, it returns the compilation and execution result.
 NEXT_PUBLIC_API_URL=http://localhost:5001
 ```
 
-For the deployed frontend:
+Set `NEXT_PUBLIC_API_URL` to the backend's public URL in the frontend hosting
+environment before building/deploying. For this deployment:
 
 ```env
 NEXT_PUBLIC_API_URL=https://nextja-coding-battle.onrender.com
 ```
 
+When `NEXT_PUBLIC_API_URL` is not set, local development uses
+`http://localhost:5001`; production builds default to the deployed backend URL
+above. Set the environment variable explicitly if your deployment uses a
+different backend.
+
 ### Backend
 
 ```env
 PORT=5001
-MONGODB_URI=your_mongodb_uri
-FRONTEND_URL=http://localhost:3000
+MONGO_URI=your_mongodb_uri
+FRONTEND_URL=http://localhost:3000,https://nextja-coding-battle.vercel.app
 PISTON_URL=http://localhost:2000/api/v2/execute
 ```
+
+`FRONTEND_URL` accepts a comma-separated list of frontend origins. The backend
+allows localhost and the deployed Vercel origin by default; set this variable
+when deploying to different frontend URLs. Include both local and deployed
+origins when you want both to access the same backend.
 
 > Never commit `.env` files, database credentials, API keys, or other secrets to GitHub.
 

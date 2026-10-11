@@ -1,5 +1,13 @@
 
-export const API_BASE_URL = "https://nextja-coding-battle.onrender.com";
+const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const defaultApiBaseUrl =
+  process.env.NODE_ENV === "development"
+    ? "http://localhost:5001"
+    : "https://nextja-coding-battle.onrender.com";
+
+export const API_BASE_URL = (
+  configuredApiBaseUrl || defaultApiBaseUrl
+).replace(/\/+$/, "");
 const API_ENDPOINT = `${API_BASE_URL}/api/battle`;
 const SUBMISSION_ENDPOINT = `${API_BASE_URL}/api/submission`;
 
