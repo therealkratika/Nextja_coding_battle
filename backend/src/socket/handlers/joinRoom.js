@@ -1,6 +1,9 @@
 
 const Battle = require("../../model/battle.js");
 const redis = require("../../config/redis");
+const {
+  markConnected,
+} = require("../../services/playerPresence");
 
 module.exports = function registerJoinRoom(socket, io) {
   socket.on("join-room", async ({ roomCode, username } = {}) => {
@@ -60,14 +63,11 @@ module.exports = function registerJoinRoom(socket, io) {
         );
       }
 
-      await redis.client.set(
-        `socket:${socket.id}`,
-        JSON.stringify({
-          roomCode: normalizedCode,
-          username: player.username,
-        }),
-        { EX: 60 * 60 }
-      );
+      await markConnected({
+        roomCode: normalizedCode,
+        username: player.username,
+        socketId: socket.id,
+      });
 
       socket.join(normalizedCode);
 

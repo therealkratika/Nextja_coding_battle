@@ -1,4 +1,8 @@
 const handlePlayerLeave = require("./handlePlayerLeave.js");
+const {
+  clearPresence,
+} = require("../../services/playerPresence");
+
 module.exports = function registerLeaveRoom(socket, io) {
   socket.on("leave-room", async ({
     roomCode,
@@ -10,13 +14,24 @@ module.exports = function registerLeaveRoom(socket, io) {
           message: "roomCode and username are required."
         });
       }
+      const normalizedCode = roomCode.trim().toUpperCase();
+      const normalizedUsername = username.trim();
+
       await handlePlayerLeave({
         socket,
         io,
-        roomCode: roomCode.trim().toUpperCase(),
-        username: username.trim(),
+        roomCode: normalizedCode,
+        username: normalizedUsername,
         reason: "left"
       });
+
+      await clearPresence(
+        {
+          roomCode: normalizedCode,
+          username: normalizedUsername,
+        },
+        socket.id
+      );
     } catch (error) {
       console.error("leave-room error:", error?.message || error);
       socket.emit("error", {

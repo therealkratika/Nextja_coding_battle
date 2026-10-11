@@ -14,6 +14,7 @@ const battleRoutes = require("./src/routes/battleRoutes");
 const questionRoutes = require("./src/routes/questionRoutes");
 const submissionRoutes = require("./src/routes/submissionRoutes");
 const battleSocket = require("./src/socket/battleSocket");
+const recoverBattles = require("./src/services/recoverBattles");
 
 const app = express();
 const server = http.createServer(app);
@@ -79,6 +80,8 @@ async function startServer() {
   try {
     await connectDB();
     await redis.connectRedis();
+
+    await recoverBattles(io);
 
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);

@@ -1,10 +1,24 @@
+const { randomUUID } = require("node:crypto");
+
 const Battle = require("../model/battle");
 const Question = require("../model/question");
 const Submission = require("../model/submission");
 const {
   judgeSubmission
 } = require("../services/judgeService");
+const {
+  syncPlayerScore,
+  getLeaderboard,
+} = require("../services/leaderboard");
+const {
+  acquireSubmissionLock,
+  releaseSubmissionLock,
+} = require("../services/submissionLock");
+
 const submitCode = async (req, res) => {
+  let submissionLockKey = null;
+  let submissionLockToken = null;
+
   try {
     const {
       roomCode,
@@ -13,7 +27,17 @@ const submitCode = async (req, res) => {
       language,
       code
     } = req.body;
-    if (!roomCode || !questionId || !username || !language || code === undefined) {
+    if (
+      typeof roomCode !== "string" ||
+      typeof questionId !== "string" ||
+      typeof username !== "string" ||
+      typeof language !== "string" ||
+      !roomCode.trim() ||
+      !questionId.trim() ||
+      !username.trim() ||
+      !language.trim() ||
+      code === undefined
+    ) {
       return res.status(400).json({
         success: false,
         message: "Missing required submission fields"
@@ -34,6 +58,18 @@ const submitCode = async (req, res) => {
         message: "Battle is not active"
       });
     }
+    const player = battle.players.find(
+      (battlePlayer) =>
+        battlePlayer.username.toLowerCase() ===
+        username.trim().toLowerCase()
+    );
+    if (!player) {
+      return res.status(404).json({
+        success: false,
+        message: "Player not found in this battle",
+      });
+    }
+
     const question = await Question.findById(questionId);
     if (!question) {
       return res.status(404).json({
@@ -41,6 +77,23 @@ const submitCode = async (req, res) => {
         message: "Question not found"
       });
     }
+
+    submissionLockToken = randomUUID();
+    submissionLockKey = await acquireSubmissionLock(
+      battle.roomCode,
+      username.trim().toLowerCase(),
+      String(question._id),
+      submissionLockToken
+    );
+
+    if (!submissionLockKey) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "A submission for this question is already being processed. Please retry.",
+      });
+    }
+
     const codeToRun = code || question.starterCode?.[language] || "";
     const judgeResult = await judgeSubmission({
       code: codeToRun,
@@ -63,7 +116,7 @@ const submitCode = async (req, res) => {
     const previousBest = await Submission.findOne({
       battleId: battle._id,
       questionId: question._id,
-      username
+      username: player.username
     }).sort({
       points: -1
     });
@@ -73,7 +126,7 @@ const submitCode = async (req, res) => {
       battleId: battle._id,
       roomCode: battle.roomCode,
       questionId: question._id,
-      username,
+      username: player.username,
       language,
       code: codeToRun,
       verdict,
@@ -86,21 +139,59 @@ const submitCode = async (req, res) => {
       totalTests,
       results
     });
-    const player = battle.players.find(p => p.username.toLowerCase() === username.toLowerCase());
-    if (player && scoreDifference > 0) {
+
+    if (scoreDifference > 0) {
       player.score = (player.score || 0) + scoreDifference;
-      if (verdict === "Accepted") {
-        player.solvedCount = Math.max(player.solvedCount || 0, 1);
-      }
-      await battle.save();
     }
-    const leaderboard = battle.players.map(player => ({
-      username: player.username,
-      score: player.score || 0
-    })).sort((a, b) => b.score - a.score);
+
+    const acceptedQuestionIds = await Submission.distinct(
+      "questionId",
+      {
+        battleId: battle._id,
+        username: player.username,
+        verdict: "Accepted",
+      }
+    );
+
+    player.solvedCount = acceptedQuestionIds.length;
+    await battle.save();
+
+    const mongoLeaderboard = battle.players
+      .map((player) => ({
+        username: player.username,
+        score: player.score || 0,
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map((player, index) => ({
+        rank: index + 1,
+        ...player,
+      }));
+    let leaderboard = mongoLeaderboard;
+
+    try {
+      await Promise.all(
+        battle.players.map((battlePlayer) =>
+          syncPlayerScore(
+            battle.roomCode,
+            battlePlayer.username,
+            battlePlayer.score || 0
+          )
+        )
+      );
+
+      leaderboard = await getLeaderboard(battle.roomCode);
+    } catch (error) {
+      console.error(
+        "Leaderboard Redis sync failed:",
+        error?.message || error
+      );
+      leaderboard = mongoLeaderboard;
+    }
+
     const io = req.app.get("io");
     if (io) {
       io.to(battle.roomCode).emit("leaderboard-updated", {
+        roomCode: battle.roomCode,
         leaderboard
       });
       io.to(battle.roomCode).emit("submission-made", {
@@ -138,6 +229,20 @@ const submitCode = async (req, res) => {
       success: false,
       message: error.message || "Submission failed"
     });
+  } finally {
+    if (submissionLockKey) {
+      try {
+        await releaseSubmissionLock(
+          submissionLockKey,
+          submissionLockToken
+        );
+      } catch (error) {
+        console.error(
+          "Submission lock release failed:",
+          error?.message || error
+        );
+      }
+    }
   }
 };
 module.exports = {

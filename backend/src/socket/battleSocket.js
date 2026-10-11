@@ -1,11 +1,14 @@
-const Battle = require("../model/battle.js");
-const redis = require("../config/redis");
-
 const registerJoinRoom = require("./handlers/joinRoom.js");
 const registerPlayerReady = require("./handlers/playerReady.js");
 const registerLeaveRoom = require("./handlers/leaveRoom.js");
 const registerStartBattle = require("./handlers/startBattle.js");
 const handlePlayerLeave = require("./handlers/handlePlayerLeave.js");
+const {
+  markDisconnected,
+  isStillSameSocket,
+  clearPresence,
+  GRACE_PERIOD_SECONDS,
+} = require("../services/playerPresence");
 
 const battleSocket = (socket, io) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
@@ -17,52 +20,52 @@ const battleSocket = (socket, io) => {
 
   socket.on("disconnect", async () => {
     try {
-      const redisKey = `socket:${socket.id}`;
-      const redisClient = redis.client;
+      const player = await markDisconnected(socket.id);
 
-      let playerInfo = await redisClient.get(redisKey);
+      if (!player) {
+        console.log(`Socket disconnected: ${socket.id}`);
+        return;
+      }
 
-      if (playerInfo) {
-        playerInfo = JSON.parse(playerInfo);
-      } else {
-        const battle = await Battle.findOne({
-          "players.socketId": socket.id,
-        });
+      console.log(
+        `⚠️ ${player.username} temporarily disconnected from ${player.roomCode}`
+      );
 
-        if (battle) {
-          const player = battle.players.find(
-            (p) => p.socketId === socket.id
+      setTimeout(async () => {
+        try {
+          const stillSameSocket = await isStillSameSocket(
+            player,
+            socket.id
           );
 
-          if (player) {
-            playerInfo = {
-              roomCode: battle.roomCode,
-              username: player.username,
-            };
-          }
+          if (!stillSameSocket) return;
+
+          await handlePlayerLeave({
+            socket,
+            io,
+            roomCode: player.roomCode,
+            username: player.username,
+            reason: "disconnected",
+          });
+
+          await clearPresence(player, socket.id);
+
+          console.log(
+            `Player ${player.username} did not reconnect within ${GRACE_PERIOD_SECONDS}s`
+          );
+        } catch (error) {
+          console.error(
+            "Delayed disconnect cleanup error:",
+            error?.message || error
+          );
         }
-      }
-
-      if (playerInfo) {
-        console.log(
-          `⚠️ ${playerInfo.username} disconnected from room: ${playerInfo.roomCode}`
-        );
-
-        await handlePlayerLeave({
-          socket,
-          io,
-          roomCode: playerInfo.roomCode,
-          username: playerInfo.username,
-          reason: "disconnected",
-        });
-      }
-
-      await redisClient.del(redisKey);
+      }, GRACE_PERIOD_SECONDS * 1000);
     } catch (error) {
-      console.error("disconnect cleanup error:", error?.message || error);
+      console.error(
+        "Disconnect handler error:",
+        error?.message || error
+      );
     }
-
-    console.log(`🔌 Socket disconnected: ${socket.id}`);
   });
 };
 
