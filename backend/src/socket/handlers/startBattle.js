@@ -3,6 +3,9 @@ const { randomUUID } = require("node:crypto");
 const Battle = require("../../model/battle.js");
 const Question = require("../../model/question.js");
 const redis = require("../../config/redis");
+const {
+  invalidateBattleCache,
+} = require("../../services/battleCache");
 
 const START_LOCK_TTL = 30;
 const END_LOCK_TTL = 30;
@@ -167,6 +170,15 @@ module.exports = function registerStartBattle(socket, io) {
         { EX: DEADLINE_TTL }
       );
 
+      try {
+        await invalidateBattleCache(normalizedCode);
+      } catch (cacheError) {
+        console.error(
+          "Start-battle cache invalidation failed:",
+          cacheError?.message || cacheError
+        );
+      }
+
       io.to(normalizedCode).emit("battle-started", {
         message: "The battle has begun! Good luck! ⚔️",
         roomCode: normalizedCode,
@@ -300,6 +312,15 @@ async function finishBattle(roomCode, io, deadline) {
 
     if (!completedBattle) {
       return;
+    }
+
+    try {
+      await invalidateBattleCache(roomCode);
+    } catch (cacheError) {
+      console.error(
+        "Battle-end cache invalidation failed:",
+        cacheError?.message || cacheError
+      );
     }
 
     const leaderboard = completedBattle.players

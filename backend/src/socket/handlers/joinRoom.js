@@ -1,6 +1,5 @@
 
 const Battle = require("../../model/battle.js");
-const redis = require("../../config/redis");
 const {
   markConnected,
 } = require("../../services/playerPresence");
@@ -22,7 +21,7 @@ module.exports = function registerJoinRoom(socket, io) {
       const normalizedCode = roomCode.trim().toUpperCase();
       const normalizedUsername = username.trim();
 
-      const battle = await Battle.findOne({
+      let battle = await Battle.findOne({
         roomCode: normalizedCode,
       });
 
@@ -32,7 +31,7 @@ module.exports = function registerJoinRoom(socket, io) {
         });
       }
 
-      const player = battle.players.find(
+      const existingPlayer = battle.players.find(
         (p) =>
           p.username.toLowerCase() ===
           normalizedUsername.toLowerCase()
@@ -40,27 +39,50 @@ module.exports = function registerJoinRoom(socket, io) {
 
       // Do not allow unknown users to join active battles either.
       // If spectators are supported, implement separate validation.
-      if (!player) {
+      if (!existingPlayer) {
         return socket.emit("error", {
           message:
             "Player not found in room. Please join via the join form first.",
         });
       }
 
-      // Capture the previous socket before replacing it.
-      const previousSocketId = player.socketId;
+      const updateResult = await Battle.updateOne(
+        {
+          roomCode: normalizedCode,
+          players: {
+            $elemMatch: {
+              username: existingPlayer.username,
+            },
+          },
+        },
+        {
+          $set: {
+            "players.$.socketId": socket.id,
+          },
+        }
+      );
 
-      player.socketId = socket.id;
-      await battle.save();
+      if (updateResult.matchedCount === 0) {
+        return socket.emit("error", {
+          message:
+            "Player is no longer in this room. Please rejoin the battle.",
+        });
+      }
 
-      // Remove the old socket mapping when this player reconnects.
-      if (
-        previousSocketId &&
-        previousSocketId !== socket.id
-      ) {
-        await redis.client.del(
-          `socket:${previousSocketId}`
-        );
+      battle = await Battle.findOne({
+        roomCode: normalizedCode,
+      });
+      const player = battle?.players.find(
+        (battlePlayer) =>
+          battlePlayer.username.toLowerCase() ===
+          normalizedUsername.toLowerCase()
+      );
+
+      if (!battle || !player) {
+        return socket.emit("error", {
+          message:
+            "Player is no longer in this room. Please rejoin the battle.",
+        });
       }
 
       await markConnected({

@@ -5,7 +5,8 @@ const {
   getBattle,
   getBattleQuestions,
   leaveBattle,
-  getBattleSubmissions
+  getBattleSubmissions,
+  getFinalLeaderboard,
 } = require("../controller/battleController.js");
 const createRateLimiter = require("../middleware/rateLimiter");
 
@@ -24,9 +25,11 @@ const router = express.Router();
 
 router.post("/create", creationLimiter, createBattle);
 router.post("/join", joinLimiter, joinBattle);
+router.post("/leave", leaveBattle);
+
 router.get("/:roomCode/questions", getBattleQuestions);
 router.get("/:roomCode/submissions", getBattleSubmissions);
-router.get("/:roomCode/final-leaderboard", require("../controller/battleController.js").getFinalLeaderboard);
+router.get("/:roomCode/final-leaderboard", getFinalLeaderboard);
 router.get("/:roomCode", getBattle);
-router.post("/leave", leaveBattle);
+
 module.exports = router;

@@ -7,8 +7,49 @@ const {
   markDisconnected,
   isStillSameSocket,
   clearPresence,
+  scheduleDisconnectCleanup,
   GRACE_PERIOD_SECONDS,
 } = require("../services/playerPresence");
+
+const DISCONNECT_CLEANUP_RETRY_MS = 5000;
+
+async function cleanupDisconnectedPlayer({ player, socket, io }) {
+  try {
+    const stillSameSocket = await isStillSameSocket(
+      player,
+      socket.id
+    );
+
+    if (!stillSameSocket) return;
+
+    const playerRemoved = await handlePlayerLeave({
+      socket,
+      io,
+      roomCode: player.roomCode,
+      username: player.username,
+      reason: "disconnected",
+      expectedSocketId: socket.id,
+    });
+
+    if (!playerRemoved) return;
+
+    await clearPresence(player, socket.id);
+
+    console.log(
+      `Player ${player.username} did not reconnect within ${GRACE_PERIOD_SECONDS}s`
+    );
+  } catch (error) {
+    console.error(
+      "Delayed disconnect cleanup error:",
+      error?.message || error
+    );
+    scheduleDisconnectCleanup(
+      player,
+      () => cleanupDisconnectedPlayer({ player, socket, io }),
+      DISCONNECT_CLEANUP_RETRY_MS
+    );
+  }
+}
 
 const battleSocket = (socket, io) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
@@ -31,35 +72,10 @@ const battleSocket = (socket, io) => {
         `⚠️ ${player.username} temporarily disconnected from ${player.roomCode}`
       );
 
-      setTimeout(async () => {
-        try {
-          const stillSameSocket = await isStillSameSocket(
-            player,
-            socket.id
-          );
-
-          if (!stillSameSocket) return;
-
-          await handlePlayerLeave({
-            socket,
-            io,
-            roomCode: player.roomCode,
-            username: player.username,
-            reason: "disconnected",
-          });
-
-          await clearPresence(player, socket.id);
-
-          console.log(
-            `Player ${player.username} did not reconnect within ${GRACE_PERIOD_SECONDS}s`
-          );
-        } catch (error) {
-          console.error(
-            "Delayed disconnect cleanup error:",
-            error?.message || error
-          );
-        }
-      }, GRACE_PERIOD_SECONDS * 1000);
+      scheduleDisconnectCleanup(
+        player,
+        () => cleanupDisconnectedPlayer({ player, socket, io })
+      );
     } catch (error) {
       console.error(
         "Disconnect handler error:",

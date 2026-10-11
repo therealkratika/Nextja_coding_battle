@@ -5,6 +5,12 @@ const {
   sanitizeQuestion
 } = require("../services/questionService.js");
 const Submission = require("../model/submission.js");
+const {
+  getCachedBattle,
+  cacheBattle,
+  invalidateBattleCache,
+} = require("../services/battleCache");
+
 const createBattle = async (req, res) => {
   try {
     const {
@@ -40,6 +46,15 @@ const createBattle = async (req, res) => {
       questions: [],
       currentQuestion: 0
     });
+    try {
+      await invalidateBattleCache(battle.roomCode);
+    } catch (error) {
+      console.error(
+        "Battle cache invalidation failed:",
+        error?.message || error
+      );
+    }
+
     return res.status(201).json({
       success: true,
       message: "Battle room created successfully",
@@ -102,6 +117,15 @@ const joinBattle = async (req, res) => {
       score: 0
     });
     await battle.save();
+    try {
+      await invalidateBattleCache(normalizedCode);
+    } catch (error) {
+      console.error(
+        "Battle cache invalidation failed:",
+        error?.message || error
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message: `${normalizedUsername} joined the room successfully!`,
@@ -117,27 +141,53 @@ const joinBattle = async (req, res) => {
 };
 const getBattle = async (req, res) => {
   try {
-    const {
-      roomCode
-    } = req.params;
-    const battle = await Battle.findOne({
-      roomCode: roomCode.toUpperCase()
-    });
+    const roomCode = req.params.roomCode.trim().toUpperCase();
+
+    try {
+      const cachedBattle = await getCachedBattle(roomCode);
+
+      if (cachedBattle) {
+        return res.status(200).json({
+          success: true,
+          data: cachedBattle,
+          source: "redis",
+        });
+      }
+    } catch (redisError) {
+      console.error(
+        "Battle cache read failed:",
+        redisError?.message || redisError
+      );
+    }
+
+    const battle = await Battle.findOne({ roomCode }).lean();
+
     if (!battle) {
       return res.status(404).json({
         success: false,
-        message: "Battle room not found."
+        message: "Battle room not found.",
       });
     }
+
+    try {
+      await cacheBattle(roomCode, battle);
+    } catch (redisError) {
+      console.error(
+        "Battle cache write failed:",
+        redisError?.message || redisError
+      );
+    }
+
     return res.status(200).json({
       success: true,
-      data: battle
+      data: battle,
+      source: "mongodb",
     });
   } catch (error) {
-    console.error("getBattle error:", error.message);
+    console.error("getBattle error:", error?.message || error);
     return res.status(500).json({
       success: false,
-      message: "Server error while fetching battle"
+      message: "Server error while fetching battle",
     });
   }
 };
@@ -293,12 +343,30 @@ const leaveBattle = async (req, res) => {
       await Battle.deleteOne({
         roomCode: battle.roomCode
       });
+      try {
+        await invalidateBattleCache(battle.roomCode);
+      } catch (error) {
+        console.error(
+          "Battle cache invalidation failed:",
+          error?.message || error
+        );
+      }
+
       return res.status(200).json({
         success: true,
         message: "Room deleted as no players remain."
       });
     }
     await battle.save();
+    try {
+      await invalidateBattleCache(battle.roomCode);
+    } catch (error) {
+      console.error(
+        "Battle cache invalidation failed:",
+        error?.message || error
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message: `${username} left the room.`,

@@ -11,6 +11,9 @@ const {
   getLeaderboard,
 } = require("../services/leaderboard");
 const {
+  invalidateBattleCache,
+} = require("../services/battleCache");
+const {
   acquireSubmissionLock,
   releaseSubmissionLock,
 } = require("../services/submissionLock");
@@ -155,6 +158,15 @@ const submitCode = async (req, res) => {
 
     player.solvedCount = acceptedQuestionIds.length;
     await battle.save();
+
+    try {
+      await invalidateBattleCache(battle.roomCode);
+    } catch (cacheError) {
+      console.error(
+        "Submission battle-cache invalidation failed:",
+        cacheError?.message || cacheError
+      );
+    }
 
     const mongoLeaderboard = battle.players
       .map((player) => ({

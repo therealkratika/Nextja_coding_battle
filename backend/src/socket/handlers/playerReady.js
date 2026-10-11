@@ -1,4 +1,6 @@
 const Battle = require("../../model/battle.js");
+const { invalidateBattleCache } = require("../../services/battleCache");
+
 module.exports = function registerPlayerReady(socket, io) {
   socket.on("player-ready", async ({
     roomCode,
@@ -32,6 +34,15 @@ module.exports = function registerPlayerReady(socket, io) {
       }
       player.ready = !player.ready;
       await battle.save();
+      try {
+        await invalidateBattleCache(normalizedCode);
+      } catch (cacheError) {
+        console.error(
+          "Player-ready cache invalidation failed:",
+          cacheError.message
+        );
+      }
+
       io.to(normalizedCode).emit("player-list-updated", {
         players: battle.players,
         host: battle.host
