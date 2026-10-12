@@ -48,9 +48,22 @@ module.exports = function registerStartBattle(socket, io) {
         return socket.emit("error", { message: "Battle has already started." });
       }
 
-      const filter = battle.difficulty && battle.difficulty !== "Random" ? { difficulty: battle.difficulty } : {};
+      const filter = {
+        isActive: true,
+        ...(battle.difficulty && battle.difficulty !== "Random"
+          ? { difficulty: battle.difficulty }
+          : {}),
+      };
       const availableQuestions = await Question.find(filter).lean();
-      const selectedQuestions = shuffleArray(availableQuestions).slice(0, battle.questionCount || 1);
+      const questionCount = battle.questionCount || 1;
+
+      if (availableQuestions.length < questionCount) {
+        return socket.emit("error", {
+          message: `Only ${availableQuestions.length} active question(s) are available for this battle. Add at least ${questionCount} matching question(s) before starting.`,
+        });
+      }
+
+      const selectedQuestions = shuffleArray(availableQuestions).slice(0, questionCount);
 
       battle.status = "active";
       battle.startedAt = new Date();

@@ -54,7 +54,7 @@ The API client includes:
 ### Configuration
 Backend API URL is configured via `NEXT_PUBLIC_API_URL` environment variable in `.env.local`:
 ```
-NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_API_URL=http://localhost:5001
 ```
 
 ## Usage Example
@@ -78,8 +78,13 @@ try {
 - `GET /api/battle/:roomCode` - Get battle details
 - `POST /api/battle/leave` - Leave battle
 
+## Code Execution
+Submissions are executed by a Piston instance. By default the backend connects to a self-hosted instance at `http://localhost:2000/api/v2/execute`; start Piston separately and install the language runtimes used by your questions. For a self-hosted Piston checkout, install runtimes on the Piston host with commands such as `cli/index.js ppman install python`, `cli/index.js ppman install javascript`, `cli/index.js ppman install c++`, and `cli/index.js ppman install java`. Confirm what is available from the Piston `/api/v2/runtimes` endpoint. Set `PISTON_URL` in the backend environment to use another Piston-compatible endpoint.
+
+The official public Piston API now requires authorization. To use it, set `PISTON_URL=https://emkc.org/api/v2/piston/execute` and configure `PISTON_API_KEY` in the **backend** environment. Keep this key server-side; do not put it in a `NEXT_PUBLIC_*` variable or frontend environment file. Self-hosting instructions are available in the [Piston repository](https://github.com/engineer-man/piston).
+
 ## Next Steps
-1. Ensure backend is running on `http://localhost:5000`
-2. Test battle creation and joining flows
-3. Socket.io integration for real-time updates (Phase 3)
-4. Production environment configuration for API URL
+1. Seed the question database with `cd backend && npm run seed:questions` (safe to run repeatedly).
+2. Ensure backend is running on `http://localhost:5001`
+3. Test battle creation and joining flows
+4. Configure `NEXT_PUBLIC_API_URL` for the production backend URL

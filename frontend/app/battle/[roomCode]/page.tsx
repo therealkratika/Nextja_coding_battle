@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import BattleShell from "@/components/battle/BattleShell";
 import { useBattleRoom } from "@/components/battle/useBattleRoom";
 
@@ -10,6 +11,7 @@ export default function BattlePage() {
 
   const {
     loading,
+    battleError,
     battleMeta,
     currentQuestionIndex,
     questions,
@@ -41,6 +43,23 @@ export default function BattlePage() {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-zinc-400 text-sm">Loading battle room…</div>
+      </main>
+    );
+  }
+
+  if (battleError) {
+    return (
+      <main className="min-h-screen bg-black flex items-center justify-center px-4">
+        <div className="w-full max-w-md text-center">
+          <p className="text-zinc-500 text-sm mb-1">Unable to load battle</p>
+          <p role="alert" className="text-white text-lg mb-6">{battleError}</p>
+          <Link
+            href="/"
+            className="inline-flex rounded-lg border border-zinc-700 px-5 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white"
+          >
+            Return home
+          </Link>
+        </div>
       </main>
     );
   }
