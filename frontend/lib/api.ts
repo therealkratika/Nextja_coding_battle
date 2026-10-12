@@ -58,7 +58,7 @@ export interface QuestionPayload {
 }
 
 export interface SubmissionPayload {
-  submission: {
+  submission?: {
     _id: string;
     verdict: string;
     executionTime: number;
@@ -68,10 +68,13 @@ export interface SubmissionPayload {
     stderr: string;
   };
   verdict: string;
+  points?: number;
   passedTests: number;
   totalTests: number;
   executionTime: number;
   memoryUsed: number;
+  stdout?: string;
+  stderr?: string;
   results: Array<{
     input: string;
     expectedOutput: string;
@@ -80,8 +83,13 @@ export interface SubmissionPayload {
     stderr: string;
     stdout: string;
   }>;
-  leaderboard: Array<{ username: string; score: number }>;
+  leaderboard?: Array<{ username: string; score: number }>;
 }
+
+export type RunCodePayload = Omit<
+  SubmissionPayload,
+  "submission" | "points" | "leaderboard"
+>;
 
 export interface PlayerSubmission {
   questionId: string;
@@ -305,6 +313,29 @@ export async function submitBattleCode(payload: {
   return response.data;
 }
 
+export async function runBattleCode(payload: {
+  roomCode: string;
+  questionId: string;
+  username: string;
+  language: string;
+  code: string;
+}): Promise<RunCodePayload> {
+  const response = await apiRequest<ApiResponse<RunCodePayload>>(
+    "/run",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    SUBMISSION_ENDPOINT
+  );
+
+  if (!response.data) {
+    throw new ApiError(500, "No code execution result returned from server");
+  }
+
+  return response.data;
+}
+
 export async function getBattleSubmissions(roomCode: string): Promise<PlayerSubmissionsResponse> {
   const response = await apiRequest<ApiResponse<PlayerSubmissionsResponse>>(
     `/${roomCode.toUpperCase()}/submissions`,
@@ -317,6 +348,19 @@ export async function getBattleSubmissions(roomCode: string): Promise<PlayerSubm
   }
 
   return response.data;
+}
+
+export async function endBattle(
+  roomCode: string,
+  username: string
+): Promise<void> {
+  await apiRequest<ApiResponse<null>>(
+    `/${roomCode.toUpperCase()}/end`,
+    {
+      method: "POST",
+      body: JSON.stringify({ username }),
+    }
+  );
 }
 
 // ─── Storage Helpers ──────────────────────────────────────────────────────────

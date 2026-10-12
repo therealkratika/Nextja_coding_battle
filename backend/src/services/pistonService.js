@@ -87,12 +87,6 @@ async function executeCode({
       throw new Error("Piston returned no execution result.");
     }
 
-    /*
-     * ============================
-     * RUNTIME ERROR
-     * ============================
-     */
-
     if (run.code !== 0 || run.signal || run.status) {
       return {
         stdout: run.stdout || "",
@@ -103,12 +97,6 @@ async function executeCode({
         memoryUsed: Number(((run.memory || 0) / (1024 * 1024)).toFixed(2))
       };
     }
-
-    /*
-     * ============================
-     * SUCCESS
-     * ============================
-     */
 
     return {
       stdout: run.stdout || "",

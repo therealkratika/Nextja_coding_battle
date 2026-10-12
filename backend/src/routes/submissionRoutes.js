@@ -1,6 +1,7 @@
 const express = require("express");
 const {
-  submitCode
+  submitCode,
+  runCode,
 } = require("../controller/submissionController.js");
 const createRateLimiter = require("../middleware/rateLimiter");
 
@@ -12,6 +13,7 @@ const submissionLimiter = createRateLimiter({
 
 const router = express.Router();
 
+router.post("/run", submissionLimiter, runCode);
 router.post("/", submissionLimiter, submitCode);
 
 module.exports = router;

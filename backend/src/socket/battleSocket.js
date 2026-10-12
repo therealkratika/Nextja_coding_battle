@@ -3,10 +3,10 @@ const registerPlayerReady = require("./handlers/playerReady.js");
 const registerLeaveRoom = require("./handlers/leaveRoom.js");
 const registerStartBattle = require("./handlers/startBattle.js");
 const handlePlayerLeave = require("./handlers/handlePlayerLeave.js");
+
 const {
   markDisconnected,
-  isStillSameSocket,
-  clearPresence,
+  claimDisconnectCleanup,
   scheduleDisconnectCleanup,
   GRACE_PERIOD_SECONDS,
 } = require("../services/playerPresence");
@@ -15,12 +15,15 @@ const DISCONNECT_CLEANUP_RETRY_MS = 5000;
 
 async function cleanupDisconnectedPlayer({ player, socket, io }) {
   try {
-    const stillSameSocket = await isStillSameSocket(
-      player,
-      socket.id
-    );
+    // Atomically claim cleanup only if this socket is still current.
+    const claimed = await claimDisconnectCleanup(player, socket.id);
 
-    if (!stillSameSocket) return;
+    if (!claimed) {
+      console.log(
+        `Skipping stale disconnect cleanup for ${player.username}`
+      );
+      return;
+    }
 
     const playerRemoved = await handlePlayerLeave({
       socket,
@@ -31,9 +34,12 @@ async function cleanupDisconnectedPlayer({ player, socket, io }) {
       expectedSocketId: socket.id,
     });
 
-    if (!playerRemoved) return;
-
-    await clearPresence(player, socket.id);
+    if (!playerRemoved) {
+      console.log(
+        `Player ${player.username} was not removed; checking room state may be necessary.`
+      );
+      return;
+    }
 
     console.log(
       `Player ${player.username} did not reconnect within ${GRACE_PERIOD_SECONDS}s`
@@ -43,6 +49,7 @@ async function cleanupDisconnectedPlayer({ player, socket, io }) {
       "Delayed disconnect cleanup error:",
       error?.message || error
     );
+
     scheduleDisconnectCleanup(
       player,
       () => cleanupDisconnectedPlayer({ player, socket, io }),
@@ -52,7 +59,7 @@ async function cleanupDisconnectedPlayer({ player, socket, io }) {
 }
 
 const battleSocket = (socket, io) => {
-  console.log(`🔌 Socket connected: ${socket.id}`);
+  console.log(`🔌Socket connected: ${socket.id}`);
 
   registerJoinRoom(socket, io);
   registerPlayerReady(socket, io);

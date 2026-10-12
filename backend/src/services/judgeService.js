@@ -1,15 +1,16 @@
-const {
-  executeCode
-} = require("./pistonService");
+const { executeCode } = require("./pistonService");
+
 async function judgeSubmission({
   code,
   language,
-  question
+  question,
+  testCases = question.hiddenTestCases || [],
+  maxPoints = question.points || 100,
 }) {
-  const hiddenTests = question.hiddenTestCases || [];
-  if (hiddenTests.length === 0) {
-    throw new Error("No hidden test cases found.");
+  if (!Array.isArray(testCases) || testCases.length === 0) {
+    throw new Error("No test cases found.");
   }
+
   let passedCount = 0;
   let executionTime = 0;
   let memoryUsed = 0;
@@ -18,28 +19,19 @@ async function judgeSubmission({
   let stdout = "";
   let stderr = "";
 
-  /*
-   * =================================
-   * RUN EACH HIDDEN TEST CASE
-   * =================================
-   */
-
-  for (const testCase of hiddenTests) {
+  for (const testCase of testCases) {
     const response = await executeCode({
       language,
       code,
-      stdin: testCase.input || ""
+      stdin: testCase.input || "",
     });
     stdout = response.stdout || "";
     stderr = response.stderr || "";
-    executionTime = Math.max(executionTime, Number(response.executionTime || 0));
+    executionTime = Math.max(
+      executionTime,
+      Number(response.executionTime || 0)
+    );
     memoryUsed = Math.max(memoryUsed, Number(response.memoryUsed || 0));
-
-    /*
-     * =================================
-     * COMPILATION ERROR
-     * =================================
-     */
 
     if (response.status === "Compilation Error") {
       verdict = "Compilation Error";
@@ -49,46 +41,32 @@ async function judgeSubmission({
         actualOutput: "",
         passed: false,
         stdout: "",
-        stderr: response.compileOutput || response.stderr || ""
+        stderr: response.compileOutput || response.stderr || "",
       });
-
-      // No point running remaining tests
       break;
     }
 
-    /*
-     * =================================
-     * RUNTIME ERROR
-     * =================================
-     */
-
     if (response.status === "Runtime Error") {
-      verdict = "Runtime Error";
+      if (verdict !== "Runtime Error") {
+        verdict = "Runtime Error";
+      }
       results.push({
         input: testCase.input || "",
         expectedOutput: testCase.expectedOutput || "",
         actualOutput: stdout.trim(),
         passed: false,
         stdout,
-        stderr
+        stderr,
       });
-
-      // Stop because program already failed
-      break;
+      continue;
     }
-
-    /*
-     * =================================
-     * COMPARE OUTPUT
-     * =================================
-     */
 
     const actualOutput = stdout.trim();
     const expectedOutput = (testCase.expectedOutput || "").trim();
     const passed = actualOutput === expectedOutput;
     if (passed) {
       passedCount++;
-    } else {
+    } else if (verdict === "Accepted") {
       verdict = "Wrong Answer";
     }
     results.push({
@@ -97,66 +75,38 @@ async function judgeSubmission({
       actualOutput,
       passed,
       stdout,
-      stderr
+      stderr,
     });
-
-    /*
-     * Stop at first wrong answer.
-     *
-     * Remove this block if you want
-     * every hidden test to execute.
-     */
-
-    if (!passed) {
-      break;
-    }
   }
 
-  /*
-   * =================================
-   * FINAL VERDICT
-   * =================================
-   */
-
-  if (passedCount === hiddenTests.length && verdict !== "Compilation Error" && verdict !== "Runtime Error") {
+  if (
+    passedCount === testCases.length &&
+    verdict !== "Compilation Error" &&
+    verdict !== "Runtime Error"
+  ) {
     verdict = "Accepted";
   }
 
-  /*
-   * =================================
-   * SCORE
-   * =================================
-   */
-
-  const points = Math.round(passedCount / hiddenTests.length * 100);
-
-  /*
-   * =================================
-   * FAILED TEST CASE
-   * =================================
-   */
-
-  const failedTestCase = results.find(result => !result.passed) || null;
-
-  /*
-   * =================================
-   * RETURN RESULT
-   * =================================
-   */
+  const points = Math.round(
+    (passedCount / testCases.length) *
+      (Number.isFinite(Number(maxPoints)) ? Number(maxPoints) : 100)
+  );
+  const failedTestCase = results.find((result) => !result.passed) || null;
 
   return {
     verdict,
     points,
     passedCount,
-    totalTests: hiddenTests.length,
+    totalTests: testCases.length,
     executionTime,
     memoryUsed,
     stdout,
     stderr,
     failedTestCase,
-    results
+    results,
   };
 }
+
 module.exports = {
-  judgeSubmission
+  judgeSubmission,
 };

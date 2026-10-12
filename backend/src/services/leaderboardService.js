@@ -21,8 +21,8 @@ async function getFinalLeaderboard(roomCode) {
   const questionMap = {};
   questions.forEach(question => {
     questionMap[question._id.toString()] = {
-      totalTests: (question.sampleTestCases?.length || 0) + (question.hiddenTestCases?.length || 0),
-      difficulty: question.difficulty
+      totalTests: question.hiddenTestCases?.length || 0,
+      points: question.points || 100,
     };
   });
 
@@ -40,7 +40,19 @@ async function getFinalLeaderboard(roomCode) {
     const bestSubmissionPerQuestion = {};
     userSubmissions.forEach(submission => {
       const qid = submission.questionId.toString();
-      if (!bestSubmissionPerQuestion[qid] || (submission.passedCount || 0) > (bestSubmissionPerQuestion[qid].passedCount || 0)) {
+      const currentBest = bestSubmissionPerQuestion[qid];
+      const submissionPassed = submission.passedCount || 0;
+      const currentPassed = currentBest?.passedCount || 0;
+      const submissionTime = new Date(submission.createdAt || 0).getTime();
+      const currentTime = new Date(currentBest?.createdAt || 0).getTime();
+
+      if (
+        !currentBest ||
+        submissionPassed > currentPassed ||
+        (submissionPassed === currentPassed &&
+          submissionTime > 0 &&
+          (!currentTime || submissionTime < currentTime))
+      ) {
         bestSubmissionPerQuestion[qid] = submission;
       }
     });
@@ -53,22 +65,22 @@ async function getFinalLeaderboard(roomCode) {
       const qid = submission.questionId.toString();
       const info = questionMap[qid];
       if (!info) return;
-      const totalTests = Math.max(info.totalTests, 1);
+      const totalTests = Math.max(
+        submission.totalTests || info.totalTests,
+        1
+      );
       const passed = submission.passedCount || 0;
       totalPassed += passed;
       totalPossible += totalTests;
-      let maxPoints = 100;
-      if (info.difficulty === "Medium") {
-        maxPoints = 200;
-      }
-      if (info.difficulty === "Hard") {
-        maxPoints = 300;
-      }
-      totalScore += Math.round(passed / totalTests * maxPoints);
+      totalScore += Math.round(passed / totalTests * info.points);
       if (passed === totalTests) {
         fullSolved++;
         if (battle.startedAt && submission.createdAt) {
-          solveTimeSum += new Date(submission.createdAt).getTime() - new Date(battle.startedAt).getTime();
+          solveTimeSum += Math.max(
+            0,
+            new Date(submission.createdAt).getTime() -
+              new Date(battle.startedAt).getTime()
+          );
         }
       }
     });

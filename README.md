@@ -66,6 +66,10 @@ Players can:
 * Submit solutions
 * Compete against other players
 
+Selecting **Exit to Final Leaderboard** ends the battle for everyone. Completed
+battles cannot be rejoined, and the final leaderboard reveals participants'
+submitted code to all players.
+
 ---
 
 ### 💻 Online Coding Environment
@@ -400,6 +404,12 @@ curl http://localhost:2000/api/v2/runtimes
 ```
 
 The project uses Piston to compile and execute submitted code.
+
+In a battle room, **Run Code** executes the question's public sample test cases
+and returns the verdict and output without saving a submission or changing the
+score. **Submit Code** executes the hidden test cases, saves the result, and
+awards points according to the question's configured point value. Hidden test
+cases are kept on the backend.
 
 ---
 

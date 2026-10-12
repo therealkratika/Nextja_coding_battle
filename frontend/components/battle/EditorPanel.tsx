@@ -9,6 +9,7 @@ interface EditorPanelProps {
   onCodeChange: (value: string | undefined) => void;
   onRun: () => void;
   onSubmit: () => void;
+  isRunning?: boolean;
   isSubmitting?: boolean;
   isBattleEnded?: boolean;
 }
@@ -27,6 +28,7 @@ export default function EditorPanel({
   onCodeChange,
   onRun,
   onSubmit,
+  isRunning = false,
   isSubmitting = false,
   isBattleEnded = false,
 }: EditorPanelProps) {
@@ -52,13 +54,14 @@ export default function EditorPanel({
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={onRun}
-            className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-sm"
+            disabled={isRunning || isSubmitting || isBattleEnded}
+            className="px-3 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-sm disabled:opacity-50"
           >
-            Run Code
+            {isRunning ? "Running..." : "Run Code"}
           </button>
           <button
             onClick={onSubmit}
-            disabled={isSubmitting || isBattleEnded}
+            disabled={isSubmitting || isRunning || isBattleEnded}
             className="px-3 py-1 rounded bg-emerald-500 text-black font-medium hover:brightness-95 text-sm disabled:opacity-50"
           >
             {isSubmitting ? "Submitting..." : "Submit Code"}

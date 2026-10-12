@@ -30,6 +30,11 @@ module.exports = function registerJoinRoom(socket, io) {
           message: "Room not found.",
         });
       }
+      if (battle.status === "completed") {
+        return socket.emit("error", {
+          message: "This battle has ended. View its final leaderboard instead.",
+        });
+      }
 
       const existingPlayer = battle.players.find(
         (p) =>

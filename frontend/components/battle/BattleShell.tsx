@@ -9,10 +9,13 @@ import { BattleMeta, LeaderboardEntry, PlayerSubmission, PlayerSubmissions, Ques
 
 interface SubmissionResultShape {
   verdict?: string;
+  points?: number;
   executionTime?: number;
   memoryUsed?: number;
   passedTests?: number;
   totalTests?: number;
+  stdout?: string;
+  stderr?: string;
   results?: Array<{
     input: string;
     expectedOutput: string;
@@ -44,9 +47,11 @@ interface BattleShellProps {
   onCodeChange: (value: string | undefined) => void;
   onRun: () => void;
   onSubmit: () => void;
+  onExit: () => void;
   onPrev: () => void;
   onNext: () => void;
   submissionResult: SubmissionResultShape | null;
+  isRunning: boolean;
   isSubmitting: boolean;
   isBattleEnded: boolean;
   battleSummary: { winner?: string; message?: string } | null;
@@ -73,9 +78,11 @@ export default function BattleShell({
   onCodeChange,
   onRun,
   onSubmit,
+  onExit,
   onPrev,
   onNext,
   submissionResult,
+  isRunning,
   isSubmitting,
   isBattleEnded,
   battleSummary,
@@ -126,6 +133,7 @@ export default function BattleShell({
                 onCodeChange={onCodeChange}
                 onRun={onRun}
                 onSubmit={onSubmit}
+                isRunning={isRunning}
                 isSubmitting={isSubmitting}
                 isBattleEnded={isBattleEnded}
               />
@@ -141,7 +149,7 @@ export default function BattleShell({
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <div className="text-xs uppercase tracking-wide text-zinc-500">Verdict</div>
-                    <div className="mt-1 font-semibold text-white">{submissionResult?.verdict || "Waiting for submission"}</div>
+                    <div className="mt-1 font-semibold text-white">{submissionResult?.verdict || "Waiting for run or submission"}</div>
                   </div>
                   <div>
                     <div className="text-xs uppercase tracking-wide text-zinc-500">Execution Time</div>
@@ -155,19 +163,25 @@ export default function BattleShell({
                     <div className="text-xs uppercase tracking-wide text-zinc-500">Tests</div>
                     <div className="mt-1 font-semibold text-white">{submissionResult?.passedTests ?? 0}/{submissionResult?.totalTests ?? 0}</div>
                   </div>
+                  {submissionResult?.points !== undefined ? (
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-zinc-500">Points Earned</div>
+                      <div className="mt-1 font-semibold text-white">{submissionResult.points}</div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="mt-4 space-y-2">
                   <div className="text-xs uppercase tracking-wide text-zinc-500">Latest Output</div>
                   <pre className="max-h-28 overflow-auto rounded bg-black/70 p-3 text-xs text-zinc-200">
-                    {submissionResult?.submission?.stdout || submissionResult?.results?.[0]?.actualOutput || "No output yet"}
+                    {submissionResult?.submission?.stdout || submissionResult?.stdout || submissionResult?.results?.[0]?.actualOutput || "No output yet"}
                   </pre>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <div>
                     <h4 className="text-xs uppercase tracking-wide text-zinc-500">Compilation / Stderr</h4>
                     <pre className="max-h-40 overflow-auto rounded bg-black/80 p-3 text-xs text-rose-300">
-                      {submissionResult?.submission?.stderr || "No errors"}
+                      {submissionResult?.submission?.stderr || submissionResult?.stderr || "No errors"}
                     </pre>
                   </div>
 
@@ -244,7 +258,7 @@ export default function BattleShell({
             </button>
           ) : (
             <button
-              onClick={() => (window.location.href = `/battle/${battleMeta?.roomCode}/final`)}
+              onClick={onExit}
               className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-sm"
             >
               Exit to Final Leaderboard

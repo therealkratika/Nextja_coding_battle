@@ -20,6 +20,7 @@ export default function BattlePage() {
     language,
     editorCode,
     submissionResult,
+    isRunning,
     isSubmitting,
     isBattleEnded,
     battleSummary,
@@ -35,6 +36,7 @@ export default function BattlePage() {
     handleNext,
     handleRunCode,
     handleSubmitCode,
+    handleEndBattle,
     handleSelectPeer,
     handleSelectReviewSubmission,
   } = useBattleRoom(roomCode);
@@ -78,9 +80,11 @@ export default function BattlePage() {
       onCodeChange={(value) => setEditorCode(value ?? "")}
       onRun={handleRunCode}
       onSubmit={handleSubmitCode}
+      onExit={handleEndBattle}
       onPrev={handlePrev}
       onNext={handleNext}
       submissionResult={submissionResult}
+      isRunning={isRunning}
       isSubmitting={isSubmitting}
       isBattleEnded={isBattleEnded}
       battleSummary={battleSummary}

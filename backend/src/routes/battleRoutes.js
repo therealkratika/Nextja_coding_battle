@@ -7,6 +7,7 @@ const {
   leaveBattle,
   getBattleSubmissions,
   getFinalLeaderboard,
+  endBattle,
 } = require("../controller/battleController.js");
 const createRateLimiter = require("../middleware/rateLimiter");
 
@@ -26,6 +27,7 @@ const router = express.Router();
 router.post("/create", creationLimiter, createBattle);
 router.post("/join", joinLimiter, joinBattle);
 router.post("/leave", leaveBattle);
+router.post("/:roomCode/end", endBattle);
 
 router.get("/:roomCode/questions", getBattleQuestions);
 router.get("/:roomCode/submissions", getBattleSubmissions);

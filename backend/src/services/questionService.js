@@ -17,7 +17,6 @@ function sanitizeQuestion(question) {
     tags: question.tags || [],
     companies: question.companies || [],
     sampleTestCases: question.sampleTestCases || [],
-    hiddenTestCases: question.hiddenTestCases || [],
     hints: question.hints || [],
     explanation: question.explanation || "",
     editorial: question.editorial || "",

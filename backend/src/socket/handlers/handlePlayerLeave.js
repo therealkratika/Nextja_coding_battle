@@ -3,6 +3,10 @@ const {
   invalidateBattleCache,
 } = require("../../services/battleCache");
 
+function normalizeUsername(username) {
+  return username.trim().toLowerCase();
+}
+
 module.exports = async function handlePlayerLeave({
   socket,
   io,
@@ -11,161 +15,289 @@ module.exports = async function handlePlayerLeave({
   reason,
   expectedSocketId,
 }) {
+  const normalizedRoomCode = roomCode.trim().toUpperCase();
+  const normalizedUsername = normalizeUsername(username);
+
+  // Find the room using its normalized code.
   const battle = await Battle.findOne({
-    roomCode
+    roomCode: normalizedRoomCode,
   });
-  if (!battle) return;
+
+  if (!battle) {
+    return false;
+  }
+
+  let updatedBattle;
 
   if (expectedSocketId) {
-    const normalizedUsername = username.toLowerCase();
-    let updatedBattle = await Battle.findOneAndUpdate(
-      {
-        roomCode,
-        players: {
-          $elemMatch: {
-            username,
-            socketId: expectedSocketId,
-          },
+    /*
+     * Disconnect cleanup:
+     * Remove the player only if their stored socketId still matches
+     * the socket that disconnected.
+     *
+     * This protects against deleting a player who reconnected using
+     * a different socket ID.
+     */
+    const playerToRemove = battle.players.find(
+      (player) =>
+        normalizeUsername(player.username) === normalizedUsername
+    );
+
+    if (!playerToRemove || playerToRemove.socketId !== expectedSocketId) {
+      return false;
+    }
+
+    const oldHost = battle.host;
+    const hostLeft =
+      normalizeUsername(oldHost) === normalizedUsername;
+
+    // Determine the replacement host before removing the player.
+    const remainingPlayers = battle.players.filter(
+      (player) =>
+        normalizeUsername(player.username) !== normalizedUsername
+    );
+
+    const nextHost = hostLeft
+      ? remainingPlayers[0]?.username || null
+      : oldHost;
+
+    /*
+     * Use a conditional update to guard against a socket change
+     * between reading the battle and updating MongoDB.
+     */
+    const filter = {
+      roomCode: normalizedRoomCode,
+      players: {
+        $elemMatch: {
+          username: playerToRemove.username,
+          socketId: expectedSocketId,
         },
       },
-      [
-        {
-          $set: {
-            players: {
-              $filter: {
-                input: "$players",
-                as: "player",
-                cond: {
-                  $not: [{
-                    $and: [
-                      { $eq: ["$$player.username", username] },
-                      { $eq: ["$$player.socketId", expectedSocketId] },
-                    ],
-                  }],
-                },
-              },
-            },
-          },
+    };
+
+    const update = {
+      $pull: {
+        players: {
+          username: playerToRemove.username,
+          socketId: expectedSocketId,
         },
-        {
-          $set: {
-            host: {
-              $cond: [
-                { $eq: [{ $toLower: "$host" }, normalizedUsername] },
-                {
-                  $ifNull: [
-                    { $arrayElemAt: ["$players.username", 0] },
-                    "$host",
-                  ],
-                },
-                "$host",
-              ],
-            },
-          },
-        },
-      ],
+      },
+    };
+
+    if (hostLeft && nextHost) {
+      update.$set = { host: nextHost };
+    }
+
+    updatedBattle = await Battle.findOneAndUpdate(
+      filter,
+      update,
       { new: true }
     );
 
-    if (!updatedBattle) return false;
-
-    try {
-      await invalidateBattleCache(roomCode);
-    } catch (cacheError) {
-      console.error(
-        "Player-leave cache invalidation failed:",
-        cacheError?.message || cacheError
-      );
+    if (!updatedBattle) {
+      // The player/socket changed before the update could complete.
+      return false;
     }
 
-    const hostLeft = battle.host.toLowerCase() === normalizedUsername;
-    if (hostLeft && updatedBattle.players.length > 0) {
-      io.to(roomCode).emit("host-changed", {
-        newHost: updatedBattle.host,
-        message: `${updatedBattle.host} is now the host.`,
-      });
-      console.log(
-        `Host transferred to: ${updatedBattle.host} in room: ${roomCode}`
-      );
-    }
-
+    // Delete an empty room only if it is still empty.
     if (updatedBattle.players.length === 0) {
       const deletion = await Battle.deleteOne({
-        roomCode,
+        _id: updatedBattle._id,
         players: { $size: 0 },
       });
+
       if (deletion.deletedCount > 0) {
-        console.log(`Room ${roomCode} deleted — no players remaining.`);
+        try {
+          await invalidateBattleCache(normalizedRoomCode);
+        } catch (error) {
+          console.error(
+            "Player-leave cache invalidation failed:",
+            error?.message || error
+          );
+        }
+
+        console.log(
+          `Room ${normalizedRoomCode} deleted — no players remaining.`
+        );
+
+        socket.leave(normalizedRoomCode);
         return true;
       }
 
-      updatedBattle = await Battle.findOne({ roomCode });
-      if (!updatedBattle) return true;
-      if (updatedBattle.players.length === 0) return true;
+      // The room changed after the update; fetch its current state.
+      updatedBattle = await Battle.findOne({
+        roomCode: normalizedRoomCode,
+      });
+
+      if (!updatedBattle) {
+        return true;
+      }
     }
 
-    socket.leave(roomCode);
-    io.to(roomCode).emit("player-left", {
-      username,
-      message: `${username} has disconnected.`,
-      players: updatedBattle.players,
-      host: updatedBattle.host,
-    });
-    io.to(roomCode).emit("player-list-updated", {
-      players: updatedBattle.players,
-      host: updatedBattle.host,
-    });
-    console.log(`${username} ${reason} from room: ${roomCode}`);
-    return true;
-  }
-
-  battle.players = battle.players.filter(player => player.username.toLowerCase() !== username.toLowerCase());
-  const hostLeft = battle.host.toLowerCase() === username.toLowerCase();
-  if (hostLeft && battle.players.length > 0) {
-    battle.host = battle.players[0].username;
-    io.to(roomCode).emit("host-changed", {
-      newHost: battle.host,
-      message: `${battle.host} is now the host.`
-    });
-    console.log(`Host transferred to: ${battle.host} in room: ${roomCode}`);
-  }
-  if (battle.players.length === 0) {
-    await Battle.deleteOne({
-      roomCode
-    });
     try {
-      await invalidateBattleCache(roomCode);
-    } catch (cacheError) {
+      await invalidateBattleCache(normalizedRoomCode);
+    } catch (error) {
       console.error(
         "Player-leave cache invalidation failed:",
-        cacheError?.message || cacheError
+        error?.message || error
       );
     }
 
-    console.log(`Room ${roomCode} deleted — no players remaining.`);
-    return;
+    if (hostLeft && updatedBattle.players.length > 0) {
+      io.to(normalizedRoomCode).emit("host-changed", {
+        newHost: updatedBattle.host,
+        message: `${updatedBattle.host} is now the host.`,
+      });
+
+      console.log(
+        `Host transferred to: ${updatedBattle.host} in room: ${normalizedRoomCode}`
+      );
+    }
+
+    socket.leave(normalizedRoomCode);
+
+    io.to(normalizedRoomCode).emit("player-left", {
+      username: playerToRemove.username,
+      message:
+        reason === "disconnected"
+          ? `${playerToRemove.username} has disconnected.`
+          : `${playerToRemove.username} has left the lobby.`,
+      players: updatedBattle.players,
+      host: updatedBattle.host,
+    });
+
+    io.to(normalizedRoomCode).emit("player-list-updated", {
+      players: updatedBattle.players,
+      host: updatedBattle.host,
+    });
+
+    console.log(
+      `${playerToRemove.username} ${reason} from room: ${normalizedRoomCode}`
+    );
+
+    return true;
   }
 
-  await battle.save();
+  /*
+   * Voluntary leave:
+   * Remove the matching player without requiring a socket ID.
+   */
+  const playerToRemove = battle.players.find(
+    (player) =>
+      normalizeUsername(player.username) === normalizedUsername
+  );
+
+  if (!playerToRemove) {
+    return false;
+  }
+
+  const hostLeft =
+    normalizeUsername(battle.host) === normalizedUsername;
+
+  const remainingPlayers = battle.players.filter(
+    (player) =>
+      normalizeUsername(player.username) !== normalizedUsername
+  );
+
+  const nextHost = hostLeft
+    ? remainingPlayers[0]?.username || null
+    : battle.host;
+
+  const update = {
+    $pull: {
+      players: { username: playerToRemove.username },
+    },
+  };
+
+  if (hostLeft && nextHost) {
+    update.$set = { host: nextHost };
+  }
+
+  updatedBattle = await Battle.findOneAndUpdate(
+    {
+      roomCode: normalizedRoomCode,
+      players: {
+        $elemMatch: { username: playerToRemove.username },
+      },
+    },
+    update,
+    { new: true }
+  );
+
+  if (!updatedBattle) {
+    return false;
+  }
+
+  if (updatedBattle.players.length === 0) {
+    const deletion = await Battle.deleteOne({
+      _id: updatedBattle._id,
+      players: { $size: 0 },
+    });
+
+    if (deletion.deletedCount > 0) {
+      try {
+        await invalidateBattleCache(normalizedRoomCode);
+      } catch (error) {
+        console.error(
+          "Player-leave cache invalidation failed:",
+          error?.message || error
+        );
+      }
+
+      socket.leave(normalizedRoomCode);
+
+      console.log(
+        `Room ${normalizedRoomCode} deleted — no players remaining.`
+      );
+
+      return true;
+    }
+
+    updatedBattle = await Battle.findOne({
+      roomCode: normalizedRoomCode,
+    });
+
+    if (!updatedBattle) {
+      return true;
+    }
+  }
+
   try {
-    await invalidateBattleCache(roomCode);
-  } catch (cacheError) {
+    await invalidateBattleCache(normalizedRoomCode);
+  } catch (error) {
     console.error(
       "Player-leave cache invalidation failed:",
-      cacheError?.message || cacheError
+      error?.message || error
     );
   }
 
-  socket.leave(roomCode);
-  io.to(roomCode).emit("player-left", {
-    username,
-    message: `${username} has ${reason === "disconnected" ? "disconnected" : "left the lobby"}.`,
-    players: battle.players,
-    host: battle.host
+  if (hostLeft && updatedBattle.players.length > 0) {
+    io.to(normalizedRoomCode).emit("host-changed", {
+      newHost: updatedBattle.host,
+      message: `${updatedBattle.host} is now the host.`,
+    });
+  }
+
+  socket.leave(normalizedRoomCode);
+
+  io.to(normalizedRoomCode).emit("player-left", {
+    username: playerToRemove.username,
+    message:
+      reason === "disconnected"
+        ? `${playerToRemove.username} has disconnected.`
+        : `${playerToRemove.username} has left the lobby.`,
+    players: updatedBattle.players,
+    host: updatedBattle.host,
   });
-  io.to(roomCode).emit("player-list-updated", {
-    players: battle.players,
-    host: battle.host
+
+  io.to(normalizedRoomCode).emit("player-list-updated", {
+    players: updatedBattle.players,
+    host: updatedBattle.host,
   });
-  console.log(`${username} ${reason} from room: ${roomCode}`);
+
+  console.log(
+    `${playerToRemove.username} ${reason} from room: ${normalizedRoomCode}`
+  );
+
+  return true;
 };

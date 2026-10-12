@@ -5,6 +5,7 @@ const {
   sanitizeQuestion
 } = require("../services/questionService.js");
 const Submission = require("../model/submission.js");
+const redis = require("../config/redis");
 const {
   getCachedBattle,
   cacheBattle,
@@ -396,6 +397,113 @@ async function getFinalLeaderboard(req, res) {
     });
   }
 }
+
+async function endBattle(req, res) {
+  try {
+    const roomCode = req.params.roomCode.trim().toUpperCase();
+    const { username } = req.body;
+
+    if (typeof username !== "string" || !username.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "username is required",
+      });
+    }
+
+    const battle = await Battle.findOne({ roomCode });
+    if (!battle) {
+      return res.status(404).json({
+        success: false,
+        message: "Battle room not found.",
+      });
+    }
+
+    const isParticipant = battle.players.some(
+      (player) =>
+        player.username.toLowerCase() === username.trim().toLowerCase()
+    );
+    if (!isParticipant) {
+      return res.status(403).json({
+        success: false,
+        message: "Only a battle participant can end the battle.",
+      });
+    }
+
+    if (battle.status === "waiting") {
+      return res.status(400).json({
+        success: false,
+        message: "The battle has not started yet.",
+      });
+    }
+
+    if (battle.status === "active") {
+      const winner =
+        [...battle.players].sort(
+          (a, b) => (b.score || 0) - (a.score || 0)
+        )[0]?.username || null;
+      const completedBattle = await Battle.findOneAndUpdate(
+        { roomCode, status: "active" },
+        {
+          $set: {
+            status: "completed",
+            endedAt: new Date(),
+            winner,
+          },
+        },
+        { new: true }
+      );
+
+      if (completedBattle) {
+        try {
+          await redis.client.del(`battle:${roomCode}:deadline`);
+        } catch (error) {
+          console.error(
+            "Battle deadline cleanup failed:",
+            error?.message || error
+          );
+        }
+
+        try {
+          await invalidateBattleCache(roomCode);
+        } catch (error) {
+          console.error(
+            "Battle cache invalidation failed:",
+            error?.message || error
+          );
+        }
+
+        const io = req.app.get("io");
+        if (io) {
+          const leaderboard = completedBattle.players
+            .map((player) => ({
+              username: player.username,
+              score: player.score || 0,
+              solvedCount: player.solvedCount || 0,
+            }))
+            .sort((a, b) => b.score - a.score);
+
+          io.to(roomCode).emit("battle-ended", {
+            message: "The battle has ended.",
+            winner: completedBattle.winner,
+            leaderboard,
+          });
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Battle ended.",
+    });
+  } catch (error) {
+    console.error("endBattle error:", error?.message || error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while ending battle.",
+    });
+  }
+}
+
 module.exports = {
   joinBattle,
   createBattle,
@@ -403,5 +511,6 @@ module.exports = {
   getBattle,
   getBattleQuestions,
   getBattleSubmissions,
-  getFinalLeaderboard
+  getFinalLeaderboard,
+  endBattle,
 };

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
-import { ApiError, getBattle, getBattleQuestions, getBattleSubmissions, submitBattleCode, API_BASE_URL } from "@/lib/api";
+import { ApiError, endBattle as endBattleRequest, getBattle, getBattleQuestions, getBattleSubmissions, runBattleCode, submitBattleCode, API_BASE_URL } from "@/lib/api";
 import {
   BattleMeta,
   LeaderboardEntry,
@@ -29,10 +29,13 @@ interface LeaderboardPayload {
 
 interface SubmissionPayload {
   verdict?: string;
+  points?: number;
   executionTime?: number;
   memoryUsed?: number;
   passedTests?: number;
   totalTests?: number;
+  stdout?: string;
+  stderr?: string;
   results?: Array<{
     input: string;
     expectedOutput: string;
@@ -63,6 +66,7 @@ export function useBattleRoom(roomCode: string) {
   const [language, setLanguage] = useState("JavaScript");
   const [editorCode, setEditorCodeState] = useState<string>("// Write your solution here\n");
   const [submissionResult, setSubmissionResult] = useState<SubmissionPayload | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBattleEnded, setIsBattleEnded] = useState(false);
   const [battleSummary, setBattleSummary] = useState<{ winner?: string; message?: string } | null>(null);
@@ -73,8 +77,40 @@ export function useBattleRoom(roomCode: string) {
   const [selectedPeer, setSelectedPeer] = useState<string | null>(null);
   const [selectedReviewSubmission, setSelectedReviewSubmission] = useState<PlayerSubmission | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const finalNavigationStarted = useRef(false);
+  const endBattleRequestStarted = useRef(false);
 
   const currentQuestion = questions[currentQuestionIndex] ?? null;
+
+  const navigateToFinalLeaderboard = useCallback(() => {
+    if (finalNavigationStarted.current) return;
+    finalNavigationStarted.current = true;
+    router.replace(`/battle/${roomCode}/final`);
+  }, [roomCode, router]);
+
+  const handleEndBattle = useCallback(async () => {
+    if (!roomCode || endBattleRequestStarted.current) return;
+    endBattleRequestStarted.current = true;
+
+    const username =
+      typeof window !== "undefined"
+        ? window.sessionStorage.getItem("username") || ""
+        : "";
+    try {
+      await endBattleRequest(roomCode, username);
+      setIsBattleEnded(true);
+      navigateToFinalLeaderboard();
+    } catch (error) {
+      endBattleRequestStarted.current = false;
+      setSubmissionResult({
+        verdict: "Could not end battle",
+        stderr:
+          error instanceof Error
+            ? error.message
+            : "Please try again.",
+      });
+    }
+  }, [navigateToFinalLeaderboard, roomCode]);
 
   const getStorageKey = (questionId?: string, selectedLanguage = language) =>
     `battle:${roomCode}:question:${questionId ?? "default"}:${selectedLanguage}`;
@@ -109,6 +145,16 @@ export function useBattleRoom(roomCode: string) {
 
         if (battle.status === "completed") {
           setIsBattleEnded(true);
+          setLeaderboard(
+            (battle.players || [])
+              .map((player, index) => ({
+                rank: index + 1,
+                username: player.username,
+                score: player.score || 0,
+              }))
+              .sort((a, b) => b.score - a.score)
+              .map((player, index) => ({ ...player, rank: index + 1 }))
+          );
           router.replace(`/battle/${battle.roomCode}/final`);
           return;
         }
@@ -118,6 +164,10 @@ export function useBattleRoom(roomCode: string) {
           const secondsLeft = Math.max(0, Math.floor((endsAt - Date.now()) / 1000));
           setTimeLeft(secondsLeft);
           setIsBattleEnded(secondsLeft === 0);
+          if (secondsLeft === 0) {
+            void handleEndBattle();
+            return;
+          }
         }
 
         const fetchedQuestions = await getBattleQuestions(roomCode);
@@ -144,7 +194,7 @@ export function useBattleRoom(roomCode: string) {
     return () => {
       cancelled = true;
     };
-  }, [roomCode, router]);
+  }, [handleEndBattle, roomCode, router]);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -236,7 +286,7 @@ export function useBattleRoom(roomCode: string) {
         }));
         setLeaderboard(normalized);
       }
-      router.replace(`/battle/${roomCode}/final`);
+      navigateToFinalLeaderboard();
     });
 
     socket.on("submission-made", (payload: { verdict?: string; submission?: SubmissionPayload["submission"] }) => {
@@ -259,22 +309,18 @@ export function useBattleRoom(roomCode: string) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [roomCode, router]);
+  }, [roomCode, navigateToFinalLeaderboard]);
 
   useEffect(() => {
     if (timeLeft == null || timeLeft <= 0) return;
     const id = setInterval(() => {
+      if (timeLeft === 1) {
+        void handleEndBattle();
+      }
       setTimeLeft((value) => (value && value > 0 ? value - 1 : 0));
     }, 1000);
     return () => clearInterval(id);
-  }, [timeLeft]);
-
-  useEffect(() => {
-    if (timeLeft !== 0) return;
-
-    setIsBattleEnded(true);
-    router.replace(`/battle/${roomCode}/final`);
-  }, [roomCode, router, timeLeft]);
+  }, [handleEndBattle, timeLeft]);
 
   useEffect(() => {
     if (!roomCode || !currentQuestion?.id) return;
@@ -330,11 +376,37 @@ export function useBattleRoom(roomCode: string) {
     setSelectedReviewSubmission(submission);
   }
   async function handleRunCode() {
-    setSubmissionResult({ verdict: "Ready", executionTime: 0, memoryUsed: 0, passedTests: 0, totalTests: 0, results: [] });
+    if (!roomCode || !currentQuestion?.id || isBattleEnded || isSubmitting) return;
+
+    const username = typeof window !== "undefined" ? window.sessionStorage.getItem("username") || "Player" : "Player";
+    setIsRunning(true);
+
+    try {
+      const result = await runBattleCode({
+        roomCode,
+        questionId: currentQuestion.id,
+        username,
+        language,
+        code: editorCode,
+      });
+      setSubmissionResult(result);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Code execution failed. Please try again.";
+
+      setSubmissionResult({
+        verdict: "Run Failed",
+        stderr: message,
+      });
+    } finally {
+      setIsRunning(false);
+    }
   }
 
   async function handleSubmitCode() {
-    if (!roomCode || !currentQuestion?.id || isBattleEnded) return;
+    if (!roomCode || !currentQuestion?.id || isBattleEnded || isRunning) return;
 
     const username = typeof window !== "undefined" ? window.sessionStorage.getItem("username") || "Player" : "Player";
     setIsSubmitting(true);
@@ -375,6 +447,7 @@ export function useBattleRoom(roomCode: string) {
     language,
     editorCode,
     submissionResult,
+    isRunning,
     isSubmitting,
     isBattleEnded,
     battleSummary,
@@ -391,6 +464,7 @@ export function useBattleRoom(roomCode: string) {
     handleNext,
     handleRunCode,
     handleSubmitCode,
+    handleEndBattle,
     handleSelectPeer,
     handleSelectReviewSubmission,
   };
