@@ -133,24 +133,36 @@ for (let index = 1; index <= 100; index += 1) {
 async function seedQuestions() {
   try {
     await connectDB();
-    const result = await Question.bulkWrite(questions.map(question => ({
-      updateOne: {
-        filter: {
-          slug: question.slug
-        },
-        update: {
-          $setOnInsert: question
-        },
-        upsert: true
-      }
-    })), {
+    const result = await Question.bulkWrite(questions.map(question => {
+      const newQuestion = { ...question };
+      delete newQuestion.isActive;
+
+      return {
+        updateOne: {
+          filter: {
+            slug: question.slug
+          },
+          update: {
+            $set: {
+              isActive: true
+            },
+            $setOnInsert: newQuestion
+          },
+          upsert: true
+        }
+      };
+    }), {
       ordered: false
     });
-    console.log(`Seeded ${result.upsertedCount} new questions`);
-    process.exit(0);
+    console.log(
+      `Seeded ${result.upsertedCount} new questions and activated existing seed questions`
+    );
+    process.exitCode = 0;
   } catch (error) {
     console.error(error);
-    process.exit(1);
+    process.exitCode = 1;
+  } finally {
+    await require("mongoose").disconnect();
   }
 }
 seedQuestions();

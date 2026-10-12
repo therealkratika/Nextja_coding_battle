@@ -411,6 +411,19 @@ score. **Submit Code** executes the hidden test cases, saves the result, and
 awards points according to the question's configured point value. Hidden test
 cases are kept on the backend.
 
+### Battle questions
+
+Battle questions are selected from the seeded MongoDB question collection.
+Populate or reactivate the seed questions with:
+
+```bash
+cd backend
+npm run seed:questions
+```
+
+Seeded questions include sample and hidden test cases and are eligible for
+random selection by difficulty.
+
 ---
 
 ## 🧪 Testing Code Execution

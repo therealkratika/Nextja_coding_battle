@@ -130,6 +130,8 @@ module.exports = function registerStartBattle(socket, io) {
 
       const filter = {
         isActive: true,
+        sampleTestCases: { $ne: [] },
+        hiddenTestCases: { $ne: [] },
         ...(battle.difficulty && battle.difficulty !== "Random"
           ? { difficulty: battle.difficulty }
           : {}),
@@ -140,7 +142,7 @@ module.exports = function registerStartBattle(socket, io) {
 
       if (availableQuestions.length < questionCount) {
         return socket.emit("error", {
-          message: `Only ${availableQuestions.length} active question(s) are available for this battle. Add at least ${questionCount} matching question(s) before starting.`,
+          message: `Only ${availableQuestions.length} active question(s) with sample and hidden tests are available for this battle. Add and activate at least ${questionCount} matching question(s) before starting.`,
         });
       }
 

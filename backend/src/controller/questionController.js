@@ -2,7 +2,8 @@ const Question = require("../model/question.js");
 const {
   createSlug,
   getQuestions: getQuestionsFromService,
-  getRandomQuestions
+  getRandomQuestions,
+  sanitizeQuestion,
 } = require("../services/questionService.js");
 function normalizeStringArray(value) {
   if (Array.isArray(value)) {
@@ -131,7 +132,10 @@ const getQuestions = async (req, res) => {
     const result = await getQuestionsFromService(req.query);
     return res.status(200).json({
       success: true,
-      data: result
+      data: {
+        ...result,
+        questions: result.questions.map(sanitizeQuestion),
+      }
     });
   } catch (error) {
     console.error("getQuestions error:", error);
@@ -146,7 +150,7 @@ const getQuestionById = async (req, res) => {
     const question = await Question.findOne({
       _id: req.params.id,
       isActive: true
-    });
+    }).lean();
     if (!question) {
       return res.status(404).json({
         success: false,
@@ -155,7 +159,7 @@ const getQuestionById = async (req, res) => {
     }
     return res.status(200).json({
       success: true,
-      data: question
+      data: sanitizeQuestion(question)
     });
   } catch (error) {
     console.error("getQuestionById error:", error);
@@ -238,7 +242,7 @@ const getRandomQuestionList = async (req, res) => {
     const questions = await getRandomQuestions(count, difficulty, category);
     return res.status(200).json({
       success: true,
-      data: questions
+      data: questions.map(sanitizeQuestion)
     });
   } catch (error) {
     console.error("getRandomQuestionList error:", error);
