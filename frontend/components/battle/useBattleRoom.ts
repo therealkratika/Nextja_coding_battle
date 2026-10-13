@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { ApiError, getBattle, getBattleQuestions, getBattleSubmissions, submitBattleCode, API_BASE_URL } from "@/lib/api";
 import {
@@ -51,6 +52,7 @@ interface SubmissionPayload {
 }
 
 export function useBattleRoom(roomCode: string) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [battleError, setBattleError] = useState<string | null>(null);
   const [battleMeta, setBattleMeta] = useState<BattleMeta | null>(null);
@@ -105,11 +107,17 @@ export function useBattleRoom(roomCode: string) {
           totalQuestions: battle.questionCount,
         });
 
+        if (battle.status === "completed") {
+          setIsBattleEnded(true);
+          router.replace(`/battle/${battle.roomCode}/final`);
+          return;
+        }
+
         if (battle.status === "active" && battle.startedAt) {
           const endsAt = new Date(battle.endedAt || Date.now()).getTime();
           const secondsLeft = Math.max(0, Math.floor((endsAt - Date.now()) / 1000));
           setTimeLeft(secondsLeft);
-          setIsBattleEnded(false);
+          setIsBattleEnded(secondsLeft === 0);
         }
 
         const fetchedQuestions = await getBattleQuestions(roomCode);
@@ -136,7 +144,7 @@ export function useBattleRoom(roomCode: string) {
     return () => {
       cancelled = true;
     };
-  }, [roomCode]);
+  }, [roomCode, router]);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -228,7 +236,7 @@ export function useBattleRoom(roomCode: string) {
         }));
         setLeaderboard(normalized);
       }
-      fetchPeerReview();
+      router.replace(`/battle/${roomCode}/final`);
     });
 
     socket.on("submission-made", (payload: { verdict?: string; submission?: SubmissionPayload["submission"] }) => {
@@ -251,7 +259,7 @@ export function useBattleRoom(roomCode: string) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [roomCode]);
+  }, [roomCode, router]);
 
   useEffect(() => {
     if (timeLeft == null || timeLeft <= 0) return;
@@ -260,6 +268,13 @@ export function useBattleRoom(roomCode: string) {
     }, 1000);
     return () => clearInterval(id);
   }, [timeLeft]);
+
+  useEffect(() => {
+    if (timeLeft !== 0) return;
+
+    setIsBattleEnded(true);
+    router.replace(`/battle/${roomCode}/final`);
+  }, [roomCode, router, timeLeft]);
 
   useEffect(() => {
     if (!roomCode || !currentQuestion?.id) return;
